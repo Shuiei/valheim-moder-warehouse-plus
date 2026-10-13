@@ -5,7 +5,7 @@ using Xunit;
 
 namespace ModerWarehouse.Tests;
 
-[Collection("BepInEx paths")]
+[Collection("Game state")]
 public sealed class WarehousePluginTests : IDisposable
 {
     private const string OriginalGuid = "ch.cris.valheim.moderwarehouse";

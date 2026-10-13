@@ -2,7 +2,7 @@ using Xunit;
 
 namespace ModerWarehouse.Tests;
 
-[Collection("BepInEx paths")]
+[Collection("Game state")]
 public sealed class WarehouseLocalizationTests : IDisposable
 {
     private readonly TestBepInEx _bepInEx = new();

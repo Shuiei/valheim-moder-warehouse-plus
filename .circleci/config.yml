@@ -1,10 +1,11 @@
 # Moder Warehouse Plus: tests, the package and a real server on every push; publishing on a version tag.
-#   game-dlls     the game's DLLs the plugin builds against, from the free Valheim dedicated server
-#                 (Steam app 896660, anonymous login): only the five it needs are kept
-#   tests         the unit tests (tests/ModerWarehousePlus.Tests, every warning an error) on .NET 10,
-#                 against the plugin and the game's DLLs, which load without the game for code that
-#                 does not touch Unity's engine. On main only, their code coverage goes to Codecov
-#                 (codecov.yml); branches run them without it
+#   game-dlls     the game's DLLs (its Managed folder, 33 MB) the plugin and its tests build against,
+#                 from the free Valheim dedicated server (Steam app 896660, anonymous login)
+#   tests         the unit tests (tests/ModerWarehousePlus.Tests, every warning an error) on .NET 10:
+#                 the plugin's logic, and whole warehouse cycles in a stand-in world (Support/World:
+#                 the game's code, patched by ServersideQoL's patcher as in the game, with Harmony
+#                 standing in for Unity's engine and the live world). On main only, their code
+#                 coverage goes to Codecov (codecov.yml); branches run them without it
 #   package       the Thunderstore package (thunderstore/build.sh, every warning an error), against those
 #                 DLLs and BepInEx, ServersideQoL and YamlDotNet from Thunderstore (tools/ci-deps.sh, the
 #                 versions manifest.json depends on); kept as an artifact
@@ -56,8 +57,8 @@ commands:
             done
             [ -x /tmp/valheim/valheim_server.x86_64 ]
 
-  # BepInEx, ServersideQoL and YamlDotNet in /tmp/libs/mods, and the game's DLLs (game-dlls) in
-  # /tmp/libs/managed: what the plugin and its tests build against.
+  # BepInEx's core, ServersideQoL (and its preloader patcher) and YamlDotNet in /tmp/libs/mods, and the
+  # game's DLLs (game-dlls) in /tmp/libs/managed: what the plugin and its tests build against.
   build-dependencies:
     steps:
       - attach_workspace:
@@ -77,13 +78,11 @@ jobs:
     steps:
       - valheim-server
       - run:
-          name: Keep the DLLs the plugin builds against
+          name: Keep the game's DLLs
           command: |
-            mkdir -p /tmp/libs/managed
-            for dll in assembly_valheim assembly_guiutils assembly_utils UnityEngine.CoreModule UnityEngine; do
-              cp "/tmp/valheim/valheim_server_Data/Managed/$dll.dll" /tmp/libs/managed/
-            done
-            ls -l /tmp/libs/managed
+            mkdir -p /tmp/libs
+            cp -r /tmp/valheim/valheim_server_Data/Managed /tmp/libs/managed
+            du -sh /tmp/libs/managed
       - persist_to_workspace:
           root: /tmp/libs
           paths:

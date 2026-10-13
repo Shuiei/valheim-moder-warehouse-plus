@@ -8,8 +8,11 @@
     <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">$(ValheimDir)/BepInEx/core</BepInExCoreDir>
     <PluginsDir Condition="'$(PluginsDir)' == ''">$(ValheimDir)/BepInEx/plugins</PluginsDir>
     <ServersideQoLDir Condition="'$(ServersideQoLDir)' == ''">$(PluginsDir)</ServersideQoLDir>
+    <!-- ServersideQoL's preloader patcher, next to its plugins/ folder (the tests run it: GamePatcher). -->
+    <PatchersDir Condition="'$(PatchersDir)' == ''">$(ServersideQoLDir)/../patchers</PatchersDir>
   </PropertyGroup>
-  <ItemGroup>
+  <!-- Every project but the tools that need none of them (GamePatcher: UsesGameDlls false). -->
+  <ItemGroup Condition="'$(UsesGameDlls)' != 'false'">
     <Reference Include="BepInEx"><HintPath>$(BepInExCoreDir)/BepInEx.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
     <Reference Include="ServersideQoL"><HintPath>$(ServersideQoLDir)/ServersideQoL.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
     <Reference Include="YamlDotNet"><HintPath>$(PluginsDir)/YamlDotNet.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>

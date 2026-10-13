@@ -39,7 +39,7 @@ internal sealed class WarehouseStatsHistory
 		{
 			if (_days.Count != 0)
 			{
-				return Math.Max(1, (DateTime.UtcNow.Date - ParseKey(_days.Keys.First())).Days + 1);
+				return Math.Max(1, (WarehouseClock.UtcNow.Date - ParseKey(_days.Keys.First())).Days + 1);
 			}
 			return 0;
 		}
@@ -53,7 +53,7 @@ internal sealed class WarehouseStatsHistory
 			{
 				return _days.Keys.First();
 			}
-			return Key(DateTime.UtcNow.Date);
+			return Key(WarehouseClock.UtcNow.Date);
 		}
 	}
 
@@ -149,13 +149,13 @@ internal sealed class WarehouseStatsHistory
 
 	public List<Day> Window(int days)
 	{
-		int minimum = Key(DateTime.UtcNow.Date.AddDays(-(Math.Max(1, days) - 1)));
+		int minimum = Key(WarehouseClock.UtcNow.Date.AddDays(-(Math.Max(1, days) - 1)));
 		return _days.Values.Where((Day x) => x.Key >= minimum).ToList();
 	}
 
 	public List<Day> PreviousWindow(int days)
 	{
-		DateTime date = DateTime.UtcNow.Date;
+		DateTime date = WarehouseClock.UtcNow.Date;
 		int minimum = Key(date.AddDays(-(Math.Max(1, days) * 2 - 1)));
 		int maximum = Key(date.AddDays(-Math.Max(1, days)));
 		return _days.Values.Where((Day x) => x.Key >= minimum && x.Key <= maximum).ToList();
@@ -184,7 +184,7 @@ internal sealed class WarehouseStatsHistory
 	private Day Today()
 	{
 		Prune();
-		int key = Key(DateTime.UtcNow.Date);
+		int key = Key(WarehouseClock.UtcNow.Date);
 		if (!_days.TryGetValue(key, out var value))
 		{
 			value = new Day
@@ -199,7 +199,7 @@ internal sealed class WarehouseStatsHistory
 
 	private void Prune()
 	{
-		int minimum = Key(DateTime.UtcNow.Date.AddDays(-89.0));
+		int minimum = Key(WarehouseClock.UtcNow.Date.AddDays(-89.0));
 		foreach (int item in _days.Keys.Where((int x) => x < minimum).ToList())
 		{
 			_days.Remove(item);

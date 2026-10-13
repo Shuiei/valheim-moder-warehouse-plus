@@ -7,7 +7,7 @@ namespace ModerWarehouse.Tests;
 /// <summary>
 /// A BepInEx folder of its own for the tests that read or write BepInEx's paths (Paths.ConfigPath,
 /// Paths.PluginPath): a new temporary folder each time, deleted with the object. Paths is static,
-/// so those tests are in the "BepInEx paths" collection, which runs one test at a time.
+/// so those tests are in the "Game state" collection (GameStateCollection).
 /// </summary>
 public sealed class TestBepInEx : IDisposable
 {
@@ -31,6 +31,3 @@ public sealed class TestBepInEx : IDisposable
 
     public void Dispose() => Directory.Delete(Root, recursive: true);
 }
-
-[CollectionDefinition("BepInEx paths", DisableParallelization = true)]
-public sealed class BepInExPathsCollection;
