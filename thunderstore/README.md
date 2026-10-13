@@ -47,8 +47,12 @@ Mod managers install these for you. Players joining the server need nothing.
 Remove `ModerWarehouse.dll` first: Plus refuses to load next to it. Your warehouses,
 labels, boards, statistics and REQ links are kept, since Plus reads the same world data.
 On its first start Plus copies `ch.cris.valheim.moderwarehouse.cfg` to
-`Tie.ModerWarehousePlus.cfg`, so your settings come along; the old file is left in place
-in case you go back.
+`Tie.ModerWarehousePlus.cfg`, so your settings come along, and the last-known stock of
+your warehouses from `plugins/ModerWarehouse/` to `config/ModerWarehousePlus/`. The old
+files are left in place in case you go back; once you are sure you won't, the
+`plugins/ModerWarehouse/` folder can be deleted.
+
+Plus keeps its stock cache and performance log in `BepInEx/config/ModerWarehousePlus/`.
 
 ## ContainerSigns
 
