@@ -56,25 +56,21 @@ tools/server-smoke.sh <dedicated server folder> dist/ModerWarehousePlus-<version
 
 CircleCI (`.circleci/config.yml`) runs the unit tests, builds the package and runs the smoke test
 on every push, from the game's DLLs and server (Steam's free dedicated server) and the mod DLLs on
-Thunderstore; on main it also sends the tests' coverage to Codecov (`codecov.yml`: the check fails under 70%). To release:
+Thunderstore; on main it keeps the packages as artifacts and sends the tests' coverage to Codecov
+(`codecov.yml`: the check fails under 70%; the token is the project's `CODECOV_TOKEN`). Nothing is
+published from CI. To release:
 
 1. Raise `Version` in `WarehousePlugin.cs` and add its section to `thunderstore/CHANGELOG.md`.
-2. Push a tag `v<version>`, e.g. `git tag v1.0.1 && git push origin v1.0.1`.
+2. Push to main and wait for its pipeline to pass; its `package` job keeps both zips as artifacts
+   (`thunderstore/build.sh` builds the same).
+3. Publish them, each version once per site (it is permanent): `ModerWarehousePlus-<version>.zip`
+   to Thunderstore and Hexium, `ModerWarehousePlus-<version>-nexus.zip` to Nexus Mods (mod 4413),
+   both to a GitHub release on a tag `v<version>`.
 
-The tag's pipeline publishes the zip (`tools/publish.py`) to a GitHub release, Thunderstore,
-Hexium and Nexus Mods, with tokens from the CircleCI context `mod-token`:
-
-| Variable | What |
-|---|---|
-| `GITHUB_TOKEN` | GitHub token that can create releases here (fine-grained: Contents read & write) |
-| `THUNDERSTORE_TOKEN` | Thunderstore service account token of the team Tie |
-| `HEXIUM_TOKEN` | Hexium team API token of Tie |
-| `NEXUS_API_KEY` | Nexus Mods personal API key |
-
-`NEXUS_MOD_ID`, the mod's number on Nexus Mods, is set in this project's CircleCI settings: a
-Nexus mod page can only be made on the website. So is `CODECOV_TOKEN`, the repository's upload
-token on Codecov. A site without its variable is skipped. Each
-version goes to each site once; running a failed release again skips the sites that have it.
+`tools/publish.py <zip> <version>` does step 3 from a machine with the tokens in its environment
+(`GITHUB_TOKEN`, `THUNDERSTORE_TOKEN`, `HEXIUM_TOKEN`, `NEXUS_API_KEY`, `NEXUS_MOD_ID=4413`); a site
+whose token is missing is skipped, and so is one that already has the version, so it can be run
+again after a failure.
 
 ## License
 
