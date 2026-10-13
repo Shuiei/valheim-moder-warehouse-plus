@@ -1,0 +1,74 @@
+[size=6][b]Moder Warehouse Plus[/b][/size]
+
+[b]A warehouse your server runs for you.[/b] Put everything in one IN chest: the server sorts it into the right chests. Write [i]Wood 100[/i] on a sign and it comes out in the OUT chest. Boards show what you have. It all runs on the server, so [b]players join with an unchanged game[/b], console and crossplay included.
+
+[img]https://raw.githubusercontent.com/Shuiei/valheim-moder-warehouse-plus/main/thunderstore/nexus-banner.png[/img]
+
+[quote][b]Moder Warehouse Plus is a fork of [url=https://thunderstore.io/c/valheim/p/CrisHaani/ModerWarehouse/]Moder Warehouse[/url] 2.0.0 by Cris Haani[/b] (MIT). Everything Moder Warehouse does is here, plus crafting requests, wildcard requests, ContainerSigns support and a few fixes. It replaces Moder Warehouse: install one or the other, not both.[/quote][size=5][b]What Plus adds[/b][/size]
+
+[list]
+[*][b]Crafting requests.[/b] [font=Courier New]craft Iron sword[/font] puts the materials for one into OUT, [font=Courier New]craft Iron sword lvl 3[/font] the materials to upgrade it, [font=Courier New]craft Stone wall x10[/font] for ten. Hammer, hoe and cultivator pieces count too. Only what OUT does not hold yet is taken.[/*]
+[*][b]Wildcard requests.[/b] [font=Courier New]*mead* 2[/font] takes 2 of every item whose name has "mead" in it; [font=Courier New]craft *frost*[/font] crafts the one recipe that matches, or lists them.[/*]
+[*][b]Works with ServersideQoL ContainerSigns.[/b] Inside a warehouse its signs show the warehouse's labels and stay that way after deposits and restarts; outside, ContainerSigns works as usual. ContainerSigns stays optional.[/*]
+[*][b]Signs keep their warehouse[/b] when ContainerSigns recreates them at a server start.[/*]
+[*][b]A stuck IN chest is freed[/b] once the player who left it open has left or walked away.[/*]
+[*][b]Faster on big warehouses:[/b] quicker world scans, and each chest is saved once per cycle instead of once per item moved.[/*]
+[/list][size=5][b]Quick start[/b][/size]
+
+Pick a name for your warehouse, such as [i]main[/i], and write these on ordinary signs, no more than three metres from their chest:
+
+[list]
+[*][font=Courier New][WH:main:IN][/font]: the chest you deposit into, and the warehouse's centre[/*]
+[*][font=Courier New][WH:main:OUT][/font]: the chest requests are delivered to[/*]
+[*][font=Courier New][WH:main:REQ][/font]: the sign you write requests on[/*]
+[*][font=Courier New][WH:main:INFO][/font]: how many chests are free, reserved and in use[/*]
+[*][font=Courier New][WH:main:BOARD][/font]: the bottom-left corner of a 4×4 stock board[/*]
+[*][font=Courier New][WH:main:STATS][/font]: the bottom-left corner of a 4×4 statistics board[/*]
+[*][font=Courier New][WH:IGNORE][/font]: keep the nearest chest out of the warehouse[/*]
+[/list]Storage chests take part when they have a sign within one metre: an item's name ([i]Wood[/i]), or a blank [font=Courier New]...[/font] for a chest the warehouse fills by itself and labels. A chest without a sign is never touched. Items with nowhere to go stay in the IN chest.
+
+[b]On the REQ sign:[/b]
+[list]
+[*][font=Courier New]Wood 100[/font], or several: [font=Courier New]Stone 10, Wood 20, Resin 5[/font][/*]
+[*][font=Courier New]SOLL Wood 1000, Stone 500[/font]: target stock, shown as a shopping list of what is missing[/*]
+[*][font=Courier New]craft Iron sword[/font], [font=Courier New]craft Iron sword lvl 3[/font], [font=Courier New]craft Stone wall x10[/font] (Plus)[/*]
+[*][font=Courier New]*mead* 2[/font], [font=Courier New]craft *frost*[/font] (Plus)[/*]
+[/list]English and German names both work, and the boards and signs speak English or German ([font=Courier New]LANG=DE[/font] on the IN sign).
+
+[size=5][b]Requirements[/b][/size]
+
+On the dedicated server:
+[list]
+[*][url=https://www.nexusmods.com/valheim/mods/3605]BepInExPack_Valheim[/url][/*]
+[*][url=https://thunderstore.io/c/valheim/p/ArgusMagnus/ServersideQoL/]ServersideQoL[/url] 2.3.0 or newer[/*]
+[*][url=https://thunderstore.io/c/valheim/p/ValheimModding/YamlDotNet/]YamlDotNet[/url] 16.3.1[/*]
+[*]Optional: [url=https://thunderstore.io/c/valheim/p/ArgusMagnus/ServersideQoL_ContainerSigns/]ServersideQoL ContainerSigns[/url][/*]
+[/list]Players who join need nothing.
+
+[size=5][b]Install[/b][/size]
+
+[list=1]
+[*]Stop the server and back up the world.[/*]
+[*]Install the requirements above.[/*]
+[*]Unzip this archive into the server's folder (the one with [font=Courier New]valheim_server.x86_64[/font] or [font=Courier New]valheim_server.exe[/font]). The plugin lands in [font=Courier New]BepInEx/plugins/ModerWarehousePlus/[/font].[/*]
+[*]Start the server. The BepInEx log shows [font=Courier New]Loading [Moder Warehouse Plus …][/font].[/*]
+[/list]A mod manager with a server profile (r2modman, Gale…) can install it from [url=https://thunderstore.io/c/valheim/p/Tie/ModerWarehousePlus/]Thunderstore[/url] with everything it needs.
+
+[size=5][b]Switching from Moder Warehouse[/b][/size]
+
+Remove [font=Courier New]ModerWarehouse.dll[/font] first: Plus refuses to load next to it. Your warehouses, labels, boards, statistics and requests are kept, since Plus reads the same world data. On its first start it copies your settings ([font=Courier New]ch.cris.valheim.moderwarehouse.cfg[/font] to [font=Courier New]Tie.ModerWarehousePlus.cfg[/font]) and the last-known stock of your warehouses; the old files stay in case you go back.
+
+[size=5][b]More[/b][/size]
+
+[list]
+[*][url=https://github.com/Shuiei/valheim-moder-warehouse-plus/blob/main/thunderstore/README.md]The full guide: every sign, the boards, statistics, several warehouses, settings and troubleshooting[/url][/*]
+[*][url=https://github.com/Shuiei/valheim-moder-warehouse-plus/issues]Report a problem or suggest an idea[/url][/*]
+[*][url=https://github.com/Shuiei/valheim-moder-warehouse-plus/blob/main/thunderstore/CHANGELOG.md]What changed in each version[/url][/*]
+[/list][size=5][b]License and credits[/b][/size]
+
+[url=https://github.com/Shuiei/valheim-moder-warehouse-plus/blob/main/LICENSE]MIT[/url]. Moder Warehouse © 2026 Cris Haani; the Plus changes © 2026 Tie. The source is on [url=https://github.com/Shuiei/valheim-moder-warehouse-plus]GitHub[/url]. Not made or endorsed by Cris Haani, Iron Gate or Coffee Stain. Back up your world before installing or updating.
+
+[size=5][b]Support[/b][/size]
+If this mod saved you some trouble:
+
+[url=https://buymeacoffee.com/tieboo][img]https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png[/img][/url]
