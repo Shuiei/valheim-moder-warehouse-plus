@@ -109,6 +109,24 @@ public sealed class TestWorld : IDisposable
         return sign;
     }
 
+    private readonly List<Peer> _players = [];
+
+    /// <summary>A player connected to the server, standing at x, z.</summary>
+    public Peer Player(float x, float z, long id = 1)
+    {
+        var peer = (ZNetPeer)RuntimeHelpers.GetUninitializedObject(typeof(ZNetPeer));
+        peer.m_uid = id;
+        peer.m_refPos = new Vector3(x, 0, z);
+        peer.m_playerName = "Player " + id;
+        var player = new Peer(peer);
+        _players.Add(player);
+        return player;
+    }
+
+    public void Move(Peer player, float x, float z) => player.ZNetPeer.m_refPos = new Vector3(x, 0, z);
+
+    public void Leave(Peer player) => _players.Remove(player);
+
     /// <summary>A player writes on a sign: the warehouse handles it as ServersideQoL would tell it.</summary>
     public void Write(ServersideQoLZDO sign, string text)
     {
@@ -119,11 +137,11 @@ public sealed class TestWorld : IDisposable
     /// <summary>ServersideQoL hands a sign to the warehouse (on a change, or once in a while).</summary>
     public void Process(ServersideQoLZDO sign) =>
         AccessTools.DeclaredMethod(typeof(WarehouseProcessor), "Process", [typeof(ServersideQoLZDO), typeof(IReadOnlyList<Peer>), typeof(ProcessorPrefabInfo<Sign>)])
-            .Invoke(Processor, [sign, Array.Empty<Peer>(), null]);
+            .Invoke(Processor, [sign, _players.ToArray(), null]);
 
     /// <summary>One warehouse cycle, now: sorting, requests, labels, boards.</summary>
     public void Run(string warehouse) =>
-        AccessTools.Method(typeof(WarehouseProcessor), "ProcessWarehouse").Invoke(Processor, [warehouse, Array.Empty<Peer>(), true]);
+        AccessTools.Method(typeof(WarehouseProcessor), "ProcessWarehouse").Invoke(Processor, [warehouse, _players.ToArray(), true]);
 
     public string TextOf(ServersideQoLZDO sign) => sign.Vars.GetText("");
 
@@ -137,11 +155,22 @@ public sealed class TestWorld : IDisposable
             && s.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty) == group);
     }
 
+    /// <summary>The cells of the 4x4 board an anchor sign started (stock or statistics), by number:
+    /// 0-3 the top row from the left, 12 the anchor (bottom left).</summary>
+    public Dictionary<int, ServersideQoLZDO> BoardCells(ServersideQoLZDO anchor)
+    {
+        string key = anchor.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty).Length > 0 ? "ModerWarehouse.BoardGroup" : "ModerWarehouse.StatsGroup";
+        string cellKey = key == "ModerWarehouse.BoardGroup" ? "ModerWarehouse.BoardCell" : "ModerWarehouse.StatsCell";
+        string group = anchor.ZDO.GetString(key, string.Empty);
+        return AllSigns.Where(s => group.Length > 0 && s.ZDO.GetString(key, string.Empty) == group && s.ZDO.GetInt(cellKey, -1) >= 0)
+            .GroupBy(s => s.ZDO.GetInt(cellKey, -1)).ToDictionary(g => g.Key, g => g.First());
+    }
+
     /// <summary>Every sign and what it says, for a failing test's message.</summary>
     public string Describe() => string.Join("\n", AllSigns.Select(s =>
     {
         Vector3 p = s.ZDO.GetPosition();
-        return $"sign at {p.x:0.##},{p.z:0.##}{(IsPlacedByMod(s) ? " (placed by the warehouse)" : "")}: {PlainTextOf(s).Replace("\n", " | ", StringComparison.Ordinal)}";
+        return $"sign at {p.x:0.##},{p.y:0.##},{p.z:0.##}{(IsPlacedByMod(s) ? " (placed by the warehouse)" : "")}: {PlainTextOf(s).Replace("\n", " | ", StringComparison.Ordinal)}";
     }));
 
     // ---- What GameStubs hands over.
@@ -171,6 +200,10 @@ public sealed class TestWorld : IDisposable
 
     internal ContainerState.IInventory? InventoryOf(ServersideQoLZDO zdo) => _chests.TryGetValue(zdo, out var chest) ? chest : null;
 
+    /// <summary>A chest's items as saved in the world (what a warehouse far away reads).</summary>
+    internal List<ItemDrop.ItemData>? SavedItemsOf(ZDO zdo) =>
+        _chests.Values.FirstOrDefault(c => c.Zdo.ZDO == zdo)?.Items.Select(i => i.Clone()).ToList();
+
     internal ServersideQoLZDO Place(Vector3 position, int prefab, Quaternion rotation)
     {
         ServersideQoLZDO zdo = NewObject(prefab, position, rotation);
@@ -184,7 +217,8 @@ public sealed class TestWorld : IDisposable
         _chests.Remove(zdo);
         ObjectsById.Remove(zdo.ZDO.m_uid);
         Signs(Processor).Remove(zdo);
-        AccessTools.Method(typeof(ServersideQoLZDO), "OnDestroyed")?.Invoke(zdo, []);
+        // The game tells whoever listens (ServersideQoL: ServersideQoLZDO.Destroyed).
+        ((Action<ZDO>?)AccessTools.Field(typeof(ZDOMan), "m_onZDODestroyed").GetValue(ZDOMan.instance))?.Invoke(zdo.ZDO);
     }
 
     internal bool IsPlacedByMod(ServersideQoLZDO zdo) => _placedByMod.Contains(zdo);
@@ -198,13 +232,91 @@ public sealed class TestWorld : IDisposable
 
     internal bool IsChestPrefab(int prefab) => prefab != SignPrefab && _prefabNames.ContainsKey(prefab);
 
-    internal string PrefabName(ServersideQoLZDO zdo) => _prefabNames.TryGetValue(zdo.ZDO.GetPrefab(), out var name) ? name : string.Empty;
+    internal string PrefabName(ServersideQoLZDO zdo) => PrefabName(zdo.ZDO);
+
+    internal string PrefabName(ZDO zdo) => _prefabNames.TryGetValue(zdo.GetPrefab(), out var name) ? name : string.Empty;
 
     internal List<ZDO> ObjectsNear(Vector3 position) =>
         _objects.Where(o => (o.ZDO.GetPosition() - position).sqrMagnitude <= 64f * 64f).Select(o => o.ZDO).ToList();
 
+    // ---- Recipes and building pieces (the game's item database, ObjectDB).
+
+    private readonly ConditionalWeakTable<UnityEngine.Object, string> _names = [];
+
+    private readonly Dictionary<ItemDrop.ItemData.SharedData, ItemDrop> _drops = [];
+
+    private readonly List<Piece> _pieces = [];
+
+    internal IEnumerable<Piece> Pieces => _pieces;
+
+    internal string? NameOf(UnityEngine.Object value) => _names.TryGetValue(value, out string? name) ? name : null;
+
+    /// <summary>A Unity object as the engine would hold it: alive (a native pointer) and named.</summary>
+    private T UnityObject<T>(string name) where T : UnityEngine.Object
+    {
+        var value = (T)RuntimeHelpers.GetUninitializedObject(typeof(T));
+        AccessTools.Field(typeof(UnityEngine.Object), "m_CachedPtr").SetValue(value, (IntPtr)1);
+        _names.AddOrUpdate(value, name);
+        return value;
+    }
+
+    private static ObjectDB Database()
+    {
+        var field = AccessTools.Field(typeof(ObjectDB), "m_instance");
+        if (field.GetValue(null) is not ObjectDB db)
+        {
+            db = (ObjectDB)RuntimeHelpers.GetUninitializedObject(typeof(ObjectDB));
+            db.m_recipes = [];
+            db.m_items = [];
+            field.SetValue(null, db);
+        }
+        return db;
+    }
+
+    /// <summary>An item's prefab (its ItemDrop), named as in the game.</summary>
+    public ItemDrop Drop(ItemDrop.ItemData.SharedData item)
+    {
+        if (!_drops.TryGetValue(item, out var drop))
+        {
+            drop = UnityObject<ItemDrop>(Items.PrefabOf(item));
+            drop.m_itemData = TestItems.Make(item, 1);
+            _drops[item] = drop;
+        }
+        return drop;
+    }
+
+    /// <summary>What a recipe or piece costs: per item, the amount for level 1 and per level above.</summary>
+    public Piece.Requirement Needs(ItemDrop.ItemData.SharedData item, int amount, int perLevel = 0) =>
+        new() { m_resItem = Drop(item), m_amount = amount, m_amountPerLevel = perLevel, m_recover = true };
+
+    /// <summary>A crafting recipe for an item (ObjectDB.m_recipes).</summary>
+    public Recipe Recipe(ItemDrop.ItemData.SharedData item, params Piece.Requirement[] resources)
+    {
+        Recipe recipe = UnityObject<Recipe>("Recipe_" + Items.PrefabOf(item));
+        recipe.m_item = Drop(item);
+        recipe.m_amount = 1;
+        recipe.m_enabled = true;
+        recipe.m_resources = resources;
+        Database().m_recipes.Add(recipe);
+        return recipe;
+    }
+
+    /// <summary>A building piece of the hammer, hoe or cultivator, with its English and German names.</summary>
+    public Piece BuildPiece(string prefab, string english, string german, params Piece.Requirement[] resources)
+    {
+        Piece piece = UnityObject<Piece>(prefab);
+        piece.m_name = "$piece_" + prefab;
+        piece.m_enabled = true;
+        piece.m_resources = resources;
+        ((Dictionary<string, string>)AccessTools.Field(typeof(WarehouseProcessor), "PieceEnglishNames").GetValue(null)!)[piece.m_name] = english;
+        ((Dictionary<string, string>)AccessTools.Field(typeof(WarehouseProcessor), "PieceGermanNames").GetValue(null)!)[piece.m_name] = german;
+        _pieces.Add(piece);
+        return piece;
+    }
+
     public void Dispose()
     {
+        AccessTools.Field(typeof(ObjectDB), "m_instance").SetValue(null, null);
         WarehouseClock.Source = () => DateTime.UtcNow;
         Current = null;
         _bepInEx.Dispose();
@@ -253,9 +365,19 @@ public sealed class Chest(ServersideQoLZDO zdo, Inventory inventory) : Container
 
     public int Saves { get; private set; }
 
-    public void Save() => Saves++;
+    /// <summary>As the game does, the chest's data changes (GameStubs reads its items back from the
+    /// chest: the game's own encoding needs its item prefabs).</summary>
+    public void Save()
+    {
+        Saves++;
+        Zdo.ZDO.Set(ZDOVars.s_items, BitConverter.GetBytes(Saves));
+    }
 
-    public void Add(ItemDrop.ItemData item) => Assert.True(Inventory.AddItem(item), "The chest is full.");
+    public void Add(ItemDrop.ItemData item)
+    {
+        Assert.True(Inventory.AddItem(item), "The chest is full.");
+        Save();
+    }
 
     public int Count(ItemDrop.ItemData.SharedData item) => Items.Where(i => i.m_shared == item).Sum(i => i.m_stack);
 

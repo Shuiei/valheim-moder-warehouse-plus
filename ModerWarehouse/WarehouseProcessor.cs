@@ -1588,7 +1588,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			return false;
 		}
 		ServersideQoLZDO.ZDOVars vars = input.Vars;
-		vars.SetInUse(false, "/tmp/claude-1000/-home-thibs-Desktop-Valheim-BepInEx-plugins-ModerWarehouse/1f4d0c08-19f3-4578-b39d-9e1f66c8da17/scratchpad/build/ModerWarehouse/WarehouseProcessor.cs", 1518);
+		vars.SetInUse(false);
 		_inputInUseSince.Remove(uid);
 		string arg = ((val == null) ? "its owner is not connected" : (flag ? $"hard limit {num3:0} s reached" : $"its owner is more than {num:0.#} m away"));
 		this.Logger.LogWarning((object)$"Warehouse '{id}': released stale IN chest lock after {totalSeconds:0} s; {arg}.");
