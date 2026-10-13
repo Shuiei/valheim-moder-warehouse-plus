@@ -31,26 +31,32 @@ dotnet test tests/ModerWarehousePlus.Tests -c Release
 tools/server-smoke.sh <dedicated server folder> dist/ModerWarehousePlus-<version>.zip
 ```
 
-- **Unit tests** (`tests/ModerWarehousePlus.Tests`, xUnit on .NET 10, one test class per plugin
-  file): requests (withdrawals, target stock, `craft`, `*` wildcards), how sign texts are read,
-  which sign is a chest's label under ContainerSigns, the first-start copies of the original's
-  settings and stock cache, translations, statistics history, board texts and the small policies.
-  They load the plugin and the game's DLLs without the game, so they reach only code that does not
-  need Unity's engine or the world; `Package/` checks the package's files against the plugin.
+- **Unit tests** (`tests/ModerWarehousePlus.Tests`, xUnit on .NET 10, one test class per plugin file):
+  requests, sign texts, ContainerSigns label choice, the first-start copies, translations,
+  statistics history, board texts and the small policies. `Package/` checks the package's files
+  against the plugin.
+- **Warehouse tests** (`World/`): the real `WarehouseProcessor` run over a stand-in world
+  (`Support/World/TestWorld`) of chests with real Valheim inventories, signs, items, recipes,
+  players and a clock: sorting, requests, crafting, labels and the janitor, ContainerSigns, IN
+  signs and their checks, renames, boards, statistics, several warehouses, stale IN locks. The
+  game's code is used as ServersideQoL patches it in the game (`tests/GamePatcher` runs its
+  preloader patcher); `Support/World/GameStubs` replaces, with Harmony, only the code that would
+  reach Unity's engine or the live world (each patch says why). The warehouse reads the time
+  through `WarehouseClock`, which the tests move on.
 - **Server smoke test** (`tools/server-smoke.sh`): the package in a real dedicated server with
   BepInEx, ServersideQoL and ContainerSigns. It must load, copy the original mod's settings and
   stock cache, start with no error of its own, and refuse to load beside the original Moder
   Warehouse. It changes the server folder it is given: use a server kept for it (SteamCMD:
   `+login anonymous +app_update 896660`).
-- **Not covered:** the warehouse at work (sorting, requests, boards, ContainerSigns labels in the
-  world), which needs players near it. Try a release on a test server before tagging it.
+- **Not covered:** what only the game has: real players' clients, the game's item database and
+  prefabs (stubbed), and the world's zones loading around players. Try a release on a test server
+  before tagging it.
 
 ## Releasing
 
 CircleCI (`.circleci/config.yml`) runs the unit tests, builds the package and runs the smoke test
 on every push, from the game's DLLs and server (Steam's free dedicated server) and the mod DLLs on
-Thunderstore; on main it also sends the tests' coverage to Codecov (informational: `codecov.yml`
-says why). To release:
+Thunderstore; on main it also sends the tests' coverage to Codecov (`codecov.yml`: the check fails under 70%). To release:
 
 1. Raise `Version` in `WarehousePlugin.cs` and add its section to `thunderstore/CHANGELOG.md`.
 2. Push a tag `v<version>`, e.g. `git tag v1.0.1 && git push origin v1.0.1`.

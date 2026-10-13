@@ -58,11 +58,16 @@ public sealed class TestItems
 
     public IEnumerable<ItemDrop.ItemData.SharedData> All => [Wood, FineWood, Stone, Resin, Amber, BronzeNails, MeadFrost, MeadHealth, Sword];
 
+    private readonly Dictionary<ItemDrop.ItemData.SharedData, string> _prefabs = [];
+
+    /// <summary>The item's prefab name (its ItemDrop's, as in "Wood").</summary>
+    public string PrefabOf(ItemDrop.ItemData.SharedData item) => _prefabs[item];
+
     /// <summary>A stack of an item, as found in a chest.</summary>
     public static ItemDrop.ItemData Make(ItemDrop.ItemData.SharedData item, int stack, bool cheated = false) =>
         new() { m_shared = item, m_stack = stack, m_quality = 1, m_durability = item.m_maxDurability, m_cheated = cheated };
 
-    private static ItemDrop.ItemData.SharedData Define(string prefab, string token, string english, string german, int maxStack,
+    private ItemDrop.ItemData.SharedData Define(string prefab, string token, string english, string german, int maxStack,
         ItemDrop.ItemData.ItemType type = ItemDrop.ItemData.ItemType.Material)
     {
         var shared = new ItemDrop.ItemData.SharedData { m_name = token, m_maxStackSize = maxStack, m_itemType = type, m_maxQuality = maxStack == 1 ? 4 : 1 };
@@ -71,6 +76,7 @@ public sealed class TestItems
         Field<Dictionary<string, string>>("GermanNames")[token] = WarehouseProcessor.Normalize(german);
         Field<Dictionary<string, string>>("GermanDisplayNames")[token] = german;
         Field<Dictionary<string, string>>("PrefabNames")[token] = prefab;
+        _prefabs[shared] = prefab;
         return shared;
     }
 

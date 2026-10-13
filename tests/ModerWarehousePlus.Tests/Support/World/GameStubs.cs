@@ -41,6 +41,9 @@ internal static class GameStubs
             Type stateImpl = AccessTools.Inner(registry, "ContainerStateImpl");
             Type warehouse = typeof(WarehouseProcessor);
 
+            // Unity objects: their type's static initializer asks the engine for an offset (only the
+            // engine uses it). Skipped before any is made, as a failed one breaks the type for good.
+            Replace(typeof(UnityEngine.Object).TypeInitializer, nameof(Skip));
             // Unity: the game's clock (logging) and rotations (placing signs).
             Replace(AccessTools.Method(typeof(ServersideQoL.Logger), "Log"), nameof(Log));
             Replace(AccessTools.Method(typeof(Quaternion), "Internal_FromEulerRad"), nameof(FromEulerRad));
@@ -77,11 +80,16 @@ internal static class GameStubs
             Replace(AccessTools.Method(warehouse, "AllContainers"), nameof(AllContainers));
             Replace(AccessTools.Method(warehouse, "IsContainerPrefab"), nameof(IsContainerPrefab));
             Replace(AccessTools.Method(warehouse, "IsPrivateContainer"), nameof(IsPrivateContainer));
+            Replace(AccessTools.Method(warehouse, "ReadPersistedContainer"), nameof(ReadPersistedContainer));
             Replace(AccessTools.Method(AccessTools.Inner(warehouse, "PersistedContainerSpatialLookup"), "IsContainer"), nameof(IsContainerObject));
             Replace(AccessTools.Method(warehouse, "IsSignObject"), nameof(IsSignObject));
             Replace(AccessTools.Method(warehouse, "WorldObjectsNear"), nameof(WorldObjectsNear));
             Replace(AccessTools.Method(warehouse, "CapturePeerMetrics"), nameof(Skip));
             Replace(AccessTools.Method(warehouse, "LoadGermanNames"), nameof(Skip));
+            // Unity objects' names (kept by the engine): the test world names its recipes, items and pieces.
+            Replace(AccessTools.PropertyGetter(typeof(UnityEngine.Object), "name"), nameof(ObjectName));
+            // The building pieces of the hammer, hoe and cultivator (read through Unity's GameObject).
+            Replace(AccessTools.Method(warehouse, "BuildPieces"), nameof(BuildPieces));
             // Whether ServersideQoL ContainerSigns is installed (BepInEx's list of loaded plugins).
             Replace(AccessTools.PropertyGetter(warehouse, "ContainerSignsLoaded"), nameof(ContainerSignsLoaded));
             _installed = true;
@@ -215,6 +223,18 @@ internal static class GameStubs
         return false;
     }
 
+    private static bool ObjectName(UnityEngine.Object __instance, ref string __result)
+    {
+        __result = TestWorld.Current?.NameOf(__instance) ?? string.Empty;
+        return false;
+    }
+
+    private static bool BuildPieces(ref IEnumerable<Piece> __result)
+    {
+        __result = World.Pieces;
+        return false;
+    }
+
     private static bool ContainerSignsLoaded(ref bool __result)
     {
         __result = World.ContainerSignsInstalled;
@@ -224,6 +244,17 @@ internal static class GameStubs
     private static bool IsContainerPrefab(int prefab, ref bool __result)
     {
         __result = World.IsChestPrefab(prefab);
+        return false;
+    }
+
+    // A chest's saved items, decoded (the game decodes them with its item prefabs, from Unity): the
+    // world's chest's own items. Private chests are left out, as the warehouse does.
+    private static bool ReadPersistedContainer(ZDO zdo, ref object? __result)
+    {
+        List<ItemDrop.ItemData>? items = World.SavedItemsOf(zdo);
+        bool isPrivate = WarehouseContainerPolicy.IsPrivatePrefab(World.PrefabName(zdo));
+        __result = items == null || isPrivate ? null
+            : Activator.CreateInstance(AccessTools.Inner(typeof(WarehouseProcessor), "PersistedContainer"), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, null, [zdo, items], null);
         return false;
     }
 
