@@ -63,6 +63,53 @@ public sealed class ContainerSignsTests : IDisposable
         Assert.Equal(_world.TextOf(own), _world.ChestText(wood));
     }
 
+    // ContainerSigns keeps a list of the signs it placed and removes them with their chest. One the
+    // warehouse removed stays on that list, and removing the chest then fails in ContainerSigns
+    // (ArgumentException "not found in PlacedObjects"), which stops the game's handling of the other
+    // objects removed with it. So the warehouse may write on a ContainerSigns sign, never remove it.
+
+    [Fact]
+    public void ABlankContainerSignsSignUsedAsALabelStaysWhereContainerSignsPutIt()
+    {
+        Chest wood = _world.Chest(5, 0);
+        var sign = _world.ContainerSignsSign("•", 5, 0.5f);
+        _input.Add(TestItems.Make(_world.Items.Wood, 10));
+
+        _world.Run("main");
+        _world.Run("main");
+
+        Assert.True(_world.Exists(sign), _world.Describe());
+        Assert.Equal("Wood", _world.PlainTextOf(sign));
+        Assert.Equal(10, wood.Count(_world.Items.Wood));
+    }
+
+    [Fact]
+    public void ABlankSignDoesNotSupersedeAContainerSignsSignUsedAsALabel()
+    {
+        Chest wood = _world.Chest(5, 0);
+        var sign = _world.ContainerSignsSign("•", 5, 0.5f);
+        _input.Add(TestItems.Make(_world.Items.Wood, 10));
+        _world.Run("main");
+        _world.Sign("...", 5.5f, 0);
+
+        _world.Run("main");
+
+        Assert.True(_world.Exists(sign), _world.Describe());
+        Assert.Equal(10, wood.Count(_world.Items.Wood));
+    }
+
+    [Fact]
+    public void CleaningASignStackLeavesContainerSignsSignsThere()
+    {
+        _world.Chest(5, 0);
+        var sign = _world.ContainerSignsSign("•", 5, 0.5f);
+        var clean = _world.Sign("[WH:CLEAN]", 5, 0.5f);
+
+        _world.Process(clean);
+
+        Assert.True(_world.Exists(sign), _world.Describe());
+    }
+
     [Fact]
     public void ChestsOutsideTheWarehouseAreLeftToContainerSigns()
     {
