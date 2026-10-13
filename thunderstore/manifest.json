@@ -1,0 +1,11 @@
+{
+  "name": "ModerWarehousePlus",
+  "version_number": "@VERSION@",
+  "website_url": "https://github.com/Shuiei/valheim-moder-warehouse-plus",
+  "description": "Server-only warehouse: sorts an IN chest, fills REQ requests, crafting and * wildcard requests, stock boards. Works with ContainerSigns. Fork of Moder Warehouse by Cris Haani.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2351",
+    "ArgusMagnus-ServersideQoL-2.3.0",
+    "ValheimModding-YamlDotNet-16.3.1"
+  ]
+}
