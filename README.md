@@ -20,9 +20,12 @@ defaults in `Directory.Build.props` (shared with the tests) are one machine's pa
 `-p:PluginsDir=` (YamlDotNet) and `-p:ServersideQoLDir=`.
 
 `thunderstore/build.sh <dist> [-p:...]` builds the package zip (manifest, mod page, changelog,
-icon from `thunderstore/make_icon.py`, license, translation guide, DLL). The version is
-`Version` in `ModerWarehouse/WarehousePlugin.cs`, and `thunderstore/CHANGELOG.md` needs a
-section for it.
+icon, license, translation guide, DLL). The version is `Version` in
+`ModerWarehouse/WarehousePlugin.cs`, and `thunderstore/CHANGELOG.md` needs a section for it. The
+icon and the Nexus Mods page's banner are drawn by `dotnet run --file thunderstore/make_images.cs`.
+
+The tools are .NET file-based apps, run with `dotnet run --file` (the repository's root holds the
+plugin's project, which `dotnet run` alone would run instead).
 
 ## Testing
 
@@ -54,23 +57,45 @@ tools/server-smoke.sh <dedicated server folder> dist/ModerWarehousePlus-<version
 
 ## Releasing
 
-CircleCI (`.circleci/config.yml`) runs the unit tests, builds the package and runs the smoke test
-on every push, from the game's DLLs and server (Steam's free dedicated server) and the mod DLLs on
-Thunderstore; on main it keeps the packages as artifacts and sends the tests' coverage to Codecov
-(`codecov.yml`: the check fails under 70%; the token is the project's `CODECOV_TOKEN`). Nothing is
-published from CI. To release:
+CircleCI runs the unit tests, builds the package and runs the smoke test on every push, from the
+game's DLLs and server (Steam's free dedicated server) and the mod DLLs on Thunderstore; on main it
+keeps the packages as artifacts and sends the tests' coverage to Codecov (`codecov.yml`: the check
+fails under 70%; the token is the project's `CODECOV_TOKEN`). It makes the release once you approve
+it (`.circleci/config.yml`, `.circleci/continue.yml`):
 
-1. Raise `Version` in `WarehousePlugin.cs` and add its section to `thunderstore/CHANGELOG.md`.
-2. Push to main and wait for its pipeline to pass; its `package` job keeps both zips as artifacts
-   (`thunderstore/build.sh` builds the same).
-3. Publish them, each version once per site (it is permanent): `ModerWarehousePlus-<version>.zip`
-   to Thunderstore and Hexium, `ModerWarehousePlus-<version>-nexus.zip` to Nexus Mods (mod 4413),
-   both to a GitHub release on a tag `v<version>`.
+1. While working, the version's `thunderstore/CHANGELOG.md` heading says `— unreleased`
+   (`## 1.0.1 — unreleased`), with `Version` raised in `ModerWarehouse/WarehousePlugin.cs`.
+2. To release, date the heading (`## 1.0.1 — 2026-10-14`) and push it to main (or merge a pull
+   request). On main, a dated heading for the plugin's version with no `v<version>` tag yet makes the
+   pipeline a release one: the usual jobs, then **hold-release** waits.
+3. In CircleCI, open that pipeline's workflow (`release`) and approve **hold-release**. Then:
+   - **github-release** tags the commit `v<version>` and makes the GitHub release with the zip the
+     pipeline built and tested. Its notes are `docs/releases/v<version>.md` when there is one, else
+     the changelog's sections since the last release;
+   - **publish-thunderstore**, **publish-hexium** and **publish-nexus** publish side by side
+     (`tools/release/publish.cs`, with the sites' settings in `tools/release/sites.json`):
+     `ModerWarehousePlus-<version>.zip` on Thunderstore and Hexium (team `Tie`), and on Nexus Mods
+     (mod 4413) repacked to unzip into the game's folder (`BepInEx/plugins/ModerWarehousePlus/`), as
+     a new version of the page's file, with the notes as the mod's changelog.
 
-`tools/publish.py <zip> <version>` does step 3 from a machine with the tokens in its environment
-(`GITHUB_TOKEN`, `THUNDERSTORE_TOKEN`, `HEXIUM_TOKEN`, `NEXUS_API_KEY`, `NEXUS_MOD_ID=4413`); a site
-whose token is missing is skipped, and so is one that already has the version, so it can be run
-again after a failure.
+A version already on a site fails its job: no site takes a version twice. A failed job can be rerun
+from CircleCI (Rerun from failed); the others are done. Still by hand: **unhide** the new version on
+Hexium (its Versions page on hexium.gg; uploads arrive hidden), and the Nexus page's description and
+pictures (`thunderstore/nexus.bbcode`, `thunderstore/nexus-banner.png`: no API changes them).
+
+The release jobs' secrets are in CircleCI's **mod-token** context, restricted to the maintainer and
+shared by the mods' projects: `GITHUB_TOKEN` (a GitHub token with Contents read and write on this
+repository), `THUNDERSTORE_TOKEN` (a service account of team Tie), `HEXIUM_TOKEN` (a team API token
+of Tie) and `NEXUS_API_KEY` (a personal API key). The project needs CircleCI's dynamic configuration
+(Project Settings › Advanced › Enable dynamic config using setup workflows).
+
+To check the publishing without publishing:
+`dotnet run --file tools/release/publish.cs -- <thunderstore|hexium|nexus> <folder> --dry-run`, with
+the zip in the folder and the site's token in the environment. It checks the token, that the version
+is not on the site yet, the categories and the files.
+
+By hand, without CI: `thunderstore/build.sh <folder>`, then tag `v<version>` and
+`gh release create` with the zip, then `publish.cs` for each site.
 
 ## License
 

@@ -9,8 +9,9 @@
     <Nullable>disable</Nullable>
     <!-- The game's DLLs are on the server already (Directory.Build.props). -->
     <CopyGameDlls>false</CopyGameDlls>
-    <!-- The tests and the packages are projects and outputs of their own, not the plugin's files. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;dist/**</DefaultItemExcludes>
+    <!-- The tests, the tools (tools/, thunderstore/) and the packages are projects and outputs of their
+         own, not the plugin's files. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests/**;tools/**;thunderstore/**;dist/**</DefaultItemExcludes>
     <NoWarn>CS0618;CS8632;CS0162;CS0414</NoWarn>
   </PropertyGroup>
   <ItemGroup>

@@ -1,196 +1,36 @@
-# Moder Warehouse Plus: tests and build checks on every push and pull request. Nothing is published
-# from CI: releases are made by hand (README.md, Releasing), from the package main keeps.
-#   game-dlls     the game's DLLs (its Managed folder, 33 MB) the plugin and its tests build against,
-#                 from the free Valheim dedicated server (Steam app 896660, anonymous login)
-#   tests         the unit tests (tests/ModerWarehousePlus.Tests, every warning an error) on .NET 10:
-#                 the plugin's logic, and whole warehouse cycles in a stand-in world (Support/World:
-#                 the game's code, patched by ServersideQoL's patcher as in the game, with Harmony
-#                 standing in for Unity's engine and the live world). On main only, their code
-#                 coverage goes to Codecov (codecov.yml, with the project's CODECOV_TOKEN); branches run
-#                 them without it
-#   package       the Thunderstore package (thunderstore/build.sh, every warning an error), against those
-#                 DLLs and BepInEx, ServersideQoL and YamlDotNet from Thunderstore (tools/ci-deps.sh, the
-#                 versions manifest.json depends on); kept as an artifact on main only
-#   server-smoke  the package in a real dedicated server with BepInEx, ServersideQoL and ContainerSigns
-#                 (tools/server-smoke.sh): it loads, takes over the original mod's settings and stock
-#                 cache, starts with no error, and refuses to load beside the original
-# What CI cannot cover: the warehouse at work (sorting, requests, boards), which needs players near it
-# in the world; check those on a test server before releasing.
+# The pipeline's start (a setup workflow, CircleCI's dynamic configuration): says whether a release is
+# due, then runs .circleci/continue.yml, where the tests, the package and the release are.
+# A release is due on main when the plugin's version (Version in ModerWarehouse/WarehousePlugin.cs) has
+# a dated heading in thunderstore/CHANGELOG.md (not "unreleased") and is not tagged yet: the release
+# workflow then runs the tests and waits for an approval (README.md, Releasing).
 version: 2.1
+setup: true
 
 orbs:
-  # Codecov's official orb: uploads the coverage with Codecov's CLI, checked against its signature
-  # (needs gpg). The token is the project's CODECOV_TOKEN. Any 6.x; a new major version is taken by hand.
-  codecov: codecov/codecov@6
-
-executors:
-  dotnet:
-    docker:
-      - image: mcr.microsoft.com/dotnet/sdk:10.0
-    resource_class: medium
-
-commands:
-  # The Valheim dedicated server in /tmp/valheim, with SteamCMD (32-bit: it needs the i386 C++ runtime).
-  valheim-server:
-    steps:
-      - run:
-          name: SteamCMD
-          command: |
-            sudo dpkg --add-architecture i386
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq lib32gcc-s1 lib32stdc++6 > /dev/null
-            mkdir -p ~/steamcmd
-            curl -fsSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar -xz -C ~/steamcmd
-      - run:
-          name: The Valheim dedicated server (anonymous)
-          no_output_timeout: 20m
-          command: |
-            # SteamCMD updates itself on its first run and sometimes exits non-zero then: retry.
-            for attempt in 1 2 3; do
-              ~/steamcmd/steamcmd.sh +force_install_dir /tmp/valheim +login anonymous +app_update 896660 validate +quit \
-                && [ -f /tmp/valheim/valheim_server_Data/Managed/assembly_valheim.dll ] && break
-              echo "SteamCMD attempt $attempt failed"; sleep 10
-            done
-            [ -x /tmp/valheim/valheim_server.x86_64 ]
-
-  # BepInEx's core, ServersideQoL (and its preloader patcher) and YamlDotNet in /tmp/libs/mods, and the
-  # game's DLLs (game-dlls) in /tmp/libs/managed: what the plugin and its tests build against.
-  build-dependencies:
-    steps:
-      - attach_workspace:
-          at: /tmp/libs
-      - run:
-          name: Tools (zip, unzip)
-          command: apt-get update -qq && apt-get install -y -qq zip unzip > /dev/null
-      - run:
-          name: BepInEx, ServersideQoL and YamlDotNet from Thunderstore
-          command: tools/ci-deps.sh /tmp/libs/mods
+  # CircleCI's orb that hands the pipeline on to another configuration. Any 1.x.
+  continuation: circleci/continuation@1
 
 jobs:
-  game-dlls:
-    docker:
-      - image: cimg/base:current
-    resource_class: medium
-    steps:
-      - valheim-server
-      - run:
-          name: Keep the game's DLLs
-          command: |
-            mkdir -p /tmp/libs
-            cp -r /tmp/valheim/valheim_server_Data/Managed /tmp/libs/managed
-            du -sh /tmp/libs/managed
-      - persist_to_workspace:
-          root: /tmp/libs
-          paths:
-            - managed
-
-  tests:
-    executor: dotnet
+  setup:
+    executor: continuation/default
     steps:
       - checkout
-      - build-dependencies
-      - restore_cache:
-          keys:
-            - nuget-v1-{{ checksum "tests/ModerWarehousePlus.Tests/ModerWarehousePlus.Tests.csproj" }}-{{ checksum "ModerWarehousePlus.csproj" }}
-            # Else main's latest (a branch whose packages changed restores only what it adds).
-            - nuget-v1-
       - run:
-          name: Build the tests (every warning is an error)
+          name: Is a release due?
           command: |
-            dotnet build tests/ModerWarehousePlus.Tests -c Release -warnaserror -p:ManagedDir=/tmp/libs/managed \
-              -p:BepInExCoreDir=/tmp/libs/mods/core -p:PluginsDir=/tmp/libs/mods/plugins
-      - run:
-          name: Unit tests
-          command: |
-            # Coverage on main only (Codecov reports main's).
-            coverage=()
-            if [ "$CIRCLE_BRANCH" = main ]; then
-              coverage=(--settings tests/coverage.runsettings --collect "Code Coverage" --results-directory /tmp/coverage)
-            fi
-            dotnet test tests/ModerWarehousePlus.Tests -c Release --no-build --blame-hang-timeout 5m "${coverage[@]}" \
-              --logger "junit;LogFilePath=/tmp/test-results/unit/results.xml" --logger "console;verbosity=normal"
-      # Saved from main only: branches reuse main's (each cache is kept 15 days and billed).
-      - when:
-          condition:
-            equal: [main, << pipeline.git.branch >>]
-          steps:
-            - save_cache:
-                key: nuget-v1-{{ checksum "tests/ModerWarehousePlus.Tests/ModerWarehousePlus.Tests.csproj" }}-{{ checksum "ModerWarehousePlus.csproj" }}
-                paths:
-                  - ~/.nuget/packages
-            - run:
-                name: gpg (Codecov's CLI is checked against its signature) and the coverage report
-                command: |
-                  apt-get install -y -qq gnupg > /dev/null
-                  # Named for Codecov's CLI (its *coverage*.* pattern), not after the machine and the time.
-                  mkdir -p /tmp/upload
-                  report=$(find /tmp/coverage -name '*.cobertura.xml' | head -n 1)
-                  [ -n "$report" ] || { echo "No coverage report: Codecov would get nothing."; exit 1; }
-                  cp "$report" /tmp/upload/coverage.cobertura.xml
-            - codecov/upload:
-                dir: /tmp/upload
-                plugins: noop
-      - store_test_results:
-          path: /tmp/test-results
-      - store_artifacts:
-          path: /tmp/test-results
-
-  package:
-    executor: dotnet
-    steps:
-      - checkout
-      - build-dependencies
-      - run:
-          name: Build the package (every warning is an error)
-          command: |
-            thunderstore/build.sh /tmp/dist -p:ManagedDir=/tmp/libs/managed \
-              -p:BepInExCoreDir=/tmp/libs/mods/core -p:PluginsDir=/tmp/libs/mods/plugins
-      # The packages kept as artifacts only for main (releases take them from there); other branches
-      # only test them.
-      - when:
-          condition:
-            equal: [main, << pipeline.git.branch >>]
-          steps:
-            - store_artifacts:
-                path: /tmp/dist
-      # For server-smoke, in the same workflow.
-      - persist_to_workspace:
-          root: /tmp
-          paths:
-            - dist
-
-  server-smoke:
-    docker:
-      - image: cimg/base:current
-    # The server generates a new world on its first start: four cores and 8 GB keep that to a minute or two.
-    resource_class: large
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - valheim-server
-      - run:
-          name: The package in the dedicated server
-          no_output_timeout: 15m
-          command: |
-            # The Thunderstore zip (dist also holds the -nexus one).
+            release=false
             version=$(sed -n 's/.*const string Version = "\([0-9.]*\)".*/\1/p' ModerWarehouse/WarehousePlugin.cs)
-            tools/server-smoke.sh /tmp/valheim "/tmp/dist/ModerWarehousePlus-$version.zip"
-      - store_artifacts:
-          path: /tmp/valheim/smoke-logs
+            if [ "$CIRCLE_BRANCH" = main ] && grep -q "^## $version — [0-9]" thunderstore/CHANGELOG.md \
+              && [ -z "$(git ls-remote --tags origin "refs/tags/v$version")" ]; then
+              release=true
+            fi
+            echo "Release of v$version due: $release"
+            echo "{\"release\": $release}" > /tmp/parameters.json
+      - continuation/continue:
+          configuration_path: .circleci/continue.yml
+          parameters: /tmp/parameters.json
 
 workflows:
-  # Side by side once the game's DLLs are there: the tests and the package; the smoke test waits for
-  # the package.
-  test:
+  setup:
     jobs:
-      - game-dlls
-      - tests:
-          requires:
-            - game-dlls
-      - package:
-          requires:
-            - game-dlls
-      - server-smoke:
-          requires:
-            - package
+      - setup

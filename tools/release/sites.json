@@ -1,0 +1,30 @@
+{
+  "thunderstore": {
+    "url": "https://thunderstore.io",
+    "team": "Tie",
+    "community": "valheim",
+    "categories": ["server-side", "utility"]
+  },
+  "hexium": {
+    "url": "https://valheim.hexium.gg",
+    "team": "Tie",
+    "community": "valheim",
+    "categories": ["Open Source", "Quality of Life", "Storage", "Crafting"],
+    "installLocation": "server"
+  },
+  "nexus": {
+    "url": "https://api.nexusmods.com",
+    "game": "valheim",
+    "modId": 4413,
+    "files": [
+      {
+        "package": "plugin",
+        "modFileId": "8145690",
+        "name": "Moder Warehouse Plus {version}",
+        "description": "Moder Warehouse Plus {version}: the server plugin. Unzip into the dedicated server's folder (BepInEx/plugins/ModerWarehousePlus/). Needs BepInExPack_Valheim, ServersideQoL 2.3.0+ and YamlDotNet 16.3.1. Players who join need nothing.",
+        "allowModManagerDownload": true,
+        "updateModVersion": true
+      }
+    ]
+  }
+}
