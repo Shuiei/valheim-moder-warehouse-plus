@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.1 — unreleased
+## 1.0.1 — 2026-10-13
 
 - With ServersideQoL ContainerSigns: the warehouse no longer removes or moves the
   signs ContainerSigns placed (it only writes the label on them). Removing one made
