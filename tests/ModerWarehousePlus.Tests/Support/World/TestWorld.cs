@@ -29,7 +29,9 @@ public sealed class TestWorld : IDisposable
 
     private readonly List<ServersideQoLZDO> _objects = [];
 
-    private readonly HashSet<ServersideQoLZDO> _placedByMod = [];
+    // Objects a mod placed, with the creator marker it gave them: the warehouse places its own as
+    // ProcessorOwned, ServersideQoL ContainerSigns its chest signs as None.
+    private readonly Dictionary<ServersideQoLZDO, ServersideQoL.Processor.CreatorMarkers> _placedByMod = [];
 
     private readonly Dictionary<ServersideQoLZDO, Chest> _chests = [];
 
@@ -109,6 +111,21 @@ public sealed class TestWorld : IDisposable
         return sign;
     }
 
+    /// <summary>
+    /// A sign ServersideQoL ContainerSigns placed for a chest, at x, z, showing text (its blank one shows
+    /// "•"). ContainerSigns keeps a list of the signs it placed and removes them itself, with their chest.
+    /// </summary>
+    public ServersideQoLZDO ContainerSignsSign(string text, float x, float z)
+    {
+        ServersideQoLZDO sign = Place(new Vector3(x, 0, z), SignPrefab, Quaternion.identity, ServersideQoL.Processor.CreatorMarkers.None);
+        sign.Vars.SetText(text);
+        Signs(Processor).Add(sign);
+        return sign;
+    }
+
+    /// <summary>Whether the object is still in the world.</summary>
+    public bool Exists(ServersideQoLZDO zdo) => _objects.Contains(zdo);
+
     private readonly List<Peer> _players = [];
 
     /// <summary>A player connected to the server, standing at x, z.</summary>
@@ -170,7 +187,7 @@ public sealed class TestWorld : IDisposable
     public string Describe() => string.Join("\n", AllSigns.Select(s =>
     {
         Vector3 p = s.ZDO.GetPosition();
-        return $"sign at {p.x:0.##},{p.y:0.##},{p.z:0.##}{(IsPlacedByMod(s) ? " (placed by the warehouse)" : "")}: {PlainTextOf(s).Replace("\n", " | ", StringComparison.Ordinal)}";
+        return $"sign at {p.x:0.##},{p.y:0.##},{p.z:0.##}{(!IsPlacedByMod(s) ? "" : CreatorMarker(s) == ServersideQoL.Processor.CreatorMarkers.None ? " (placed by ContainerSigns)" : " (placed by the warehouse)")}: {PlainTextOf(s).Replace("\n", " | ", StringComparison.Ordinal)}";
     }));
 
     // ---- What GameStubs hands over.
@@ -204,10 +221,10 @@ public sealed class TestWorld : IDisposable
     internal List<ItemDrop.ItemData>? SavedItemsOf(ZDO zdo) =>
         _chests.Values.FirstOrDefault(c => c.Zdo.ZDO == zdo)?.Items.Select(i => i.Clone()).ToList();
 
-    internal ServersideQoLZDO Place(Vector3 position, int prefab, Quaternion rotation)
+    internal ServersideQoLZDO Place(Vector3 position, int prefab, Quaternion rotation, ServersideQoL.Processor.CreatorMarkers marker)
     {
         ServersideQoLZDO zdo = NewObject(prefab, position, rotation);
-        _placedByMod.Add(zdo);
+        _placedByMod[zdo] = marker;
         return zdo;
     }
 
@@ -221,7 +238,9 @@ public sealed class TestWorld : IDisposable
         ((Action<ZDO>?)AccessTools.Field(typeof(ZDOMan), "m_onZDODestroyed").GetValue(ZDOMan.instance))?.Invoke(zdo.ZDO);
     }
 
-    internal bool IsPlacedByMod(ServersideQoLZDO zdo) => _placedByMod.Contains(zdo);
+    internal bool IsPlacedByMod(ServersideQoLZDO zdo) => _placedByMod.ContainsKey(zdo);
+
+    internal ServersideQoL.Processor.CreatorMarkers CreatorMarker(ServersideQoLZDO zdo) => _placedByMod.GetValueOrDefault(zdo);
 
     private readonly Dictionary<(ServersideQoLZDO, string), bool> _pieceFields = [];
 

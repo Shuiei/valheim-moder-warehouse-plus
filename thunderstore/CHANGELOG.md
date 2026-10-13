@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — unreleased
+
+- With ServersideQoL ContainerSigns: the warehouse no longer removes or moves the
+  signs ContainerSigns placed (it only writes the label on them). Removing one made
+  ContainerSigns fail when that chest was later removed, and the game then skipped
+  the other objects removed at the same moment. `[WH:CLEAN]` and superseded labels
+  also leave ContainerSigns signs alone.
+
 ## 1.0.0 — 2026-10-13
 
 First release of Moder Warehouse Plus, a fork of Moder Warehouse 2.0.0 by Cris Haani.
