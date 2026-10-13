@@ -169,7 +169,10 @@ jobs:
       - run:
           name: The package in the dedicated server
           no_output_timeout: 15m
-          command: tools/server-smoke.sh /tmp/valheim /tmp/dist/ModerWarehousePlus-*.zip
+          command: |
+            # The Thunderstore zip (dist also holds the -nexus one).
+            version=$(sed -n 's/.*const string Version = "\([0-9.]*\)".*/\1/p' ModerWarehouse/WarehousePlugin.cs)
+            tools/server-smoke.sh /tmp/valheim "/tmp/dist/ModerWarehousePlus-$version.zip"
       - store_artifacts:
           path: /tmp/valheim/smoke-logs
 
