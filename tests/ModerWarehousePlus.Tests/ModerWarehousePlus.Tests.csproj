@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The plugin's tests: one test class per file, named after the plugin file it tests
+       (WarehouseProcessor, which is large, has one per area: WarehouseProcessorRequestTests, ...).
+       Package/ checks the package's files against the plugin; Support/ holds the helpers.
+       They run on .NET 10 against the plugin built for .NET Framework 4.7.2 and the game's DLLs,
+       which load without the game as long as nothing touches Unity's engine. -->
+  <PropertyGroup>
+    <!-- CI builds them with warnings as errors (.circleci/config.yml). -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ModerWarehouse.Tests</RootNamespace>
+    <!-- The plugin and the game's DLLs are copied next to the tests (Directory.Build.props). -->
+    <CopyGameDlls>true</CopyGameDlls>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Include="JunitXml.TestLogger" Version="7.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Built first, then referenced as a DLL: a .NET Framework project is not referenced from .NET 10. -->
+    <ProjectReference Include="../../ModerWarehousePlus.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
+    <Reference Include="ModerWarehousePlus"><HintPath>../../bin/$(Configuration)/net472/ModerWarehousePlus.dll</HintPath></Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The package's files, for Package/PackageTests. -->
+    <None Include="../../thunderstore/manifest.json;../../thunderstore/CHANGELOG.md;../../thunderstore/README.md" LinkBase="package" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

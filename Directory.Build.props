@@ -1,0 +1,22 @@
+<Project>
+  <!-- The DLLs the plugin and its tests build against: the game's (a Valheim dedicated server),
+       BepInEx's, ServersideQoL's and YamlDotNet's. Defaults are one machine's server; give your own
+       with -p:ValheimDir=<server folder>, or each folder (CI does: .circleci/config.yml). -->
+  <PropertyGroup>
+    <ValheimDir Condition="'$(ValheimDir)' == ''">/home/thibs/Desktop/Valheim_BepInEx</ValheimDir>
+    <ManagedDir Condition="'$(ManagedDir)' == ''">$(ValheimDir)/valheim_server_Data/Managed</ManagedDir>
+    <BepInExCoreDir Condition="'$(BepInExCoreDir)' == ''">$(ValheimDir)/BepInEx/core</BepInExCoreDir>
+    <PluginsDir Condition="'$(PluginsDir)' == ''">$(ValheimDir)/BepInEx/plugins</PluginsDir>
+    <ServersideQoLDir Condition="'$(ServersideQoLDir)' == ''">$(PluginsDir)</ServersideQoLDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(BepInExCoreDir)/BepInEx.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="ServersideQoL"><HintPath>$(ServersideQoLDir)/ServersideQoL.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="YamlDotNet"><HintPath>$(PluginsDir)/YamlDotNet.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="assembly_valheim"><HintPath>$(ManagedDir)/assembly_valheim.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="assembly_guiutils"><HintPath>$(ManagedDir)/assembly_guiutils.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="assembly_utils"><HintPath>$(ManagedDir)/assembly_utils.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)/UnityEngine.CoreModule.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)/UnityEngine.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
+  </ItemGroup>
+</Project>

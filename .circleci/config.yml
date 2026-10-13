@@ -1,25 +1,43 @@
-# Moder Warehouse Plus: build the package on every push; publish it on a version tag.
-#   game-dlls  the game's DLLs the plugin builds against, from the free Valheim dedicated server
-#              (Steam app 896660, anonymous login): only the five it needs are kept
-#   package    the Thunderstore package (thunderstore/build.sh, every warning an error), against
-#              those DLLs and BepInEx, ServersideQoL and YamlDotNet from Thunderstore
-#              (tools/ci-deps.sh, the versions manifest.json depends on); kept as an artifact
-#   publish    on a tag vX.Y.Z only, once the package is built: the tag must match the plugin's
-#              version, then tools/publish.py sends the zip to a GitHub release, Thunderstore, Hexium
-#              and Nexus Mods. Its tokens are in the context mod-token, shared by the mods' projects
-#              (GITHUB_TOKEN, THUNDERSTORE_TOKEN, HEXIUM_TOKEN, NEXUS_API_KEY); NEXUS_MOD_ID is this
-#              project's own environment variable. Publishing is permanent: a version number goes
-#              to each site once (a re-run skips the sites that already have it).
+# Moder Warehouse Plus: tests, the package and a real server on every push; publishing on a version tag.
+#   game-dlls     the game's DLLs the plugin builds against, from the free Valheim dedicated server
+#                 (Steam app 896660, anonymous login): only the five it needs are kept
+#   tests         the unit tests (tests/ModerWarehousePlus.Tests, every warning an error) on .NET 10,
+#                 against the plugin and the game's DLLs, which load without the game for code that
+#                 does not touch Unity's engine. On main only, their code coverage goes to Codecov
+#                 (codecov.yml); branches run them without it
+#   package       the Thunderstore package (thunderstore/build.sh, every warning an error), against those
+#                 DLLs and BepInEx, ServersideQoL and YamlDotNet from Thunderstore (tools/ci-deps.sh, the
+#                 versions manifest.json depends on); kept as an artifact
+#   server-smoke  the package in a real dedicated server with BepInEx, ServersideQoL and ContainerSigns
+#                 (tools/server-smoke.sh): it loads, takes over the original mod's settings and stock
+#                 cache, starts with no error, and refuses to load beside the original
+#   publish       on a tag vX.Y.Z only, once all of the above passed: the tag must match the plugin's
+#                 version, then tools/publish.py sends the zip to a GitHub release, Thunderstore, Hexium
+#                 and Nexus Mods. Its tokens are in the context mod-token, shared by the mods' projects
+#                 (GITHUB_TOKEN, THUNDERSTORE_TOKEN, HEXIUM_TOKEN, NEXUS_API_KEY); NEXUS_MOD_ID and
+#                 CODECOV_TOKEN are this project's own environment variables. Publishing is permanent: a
+#                 version number goes to each site once (a re-run skips the sites that already have it).
+# What CI cannot cover: the warehouse at work (sorting, requests, boards), which needs players near it
+# in the world; check those on a test server before tagging.
 version: 2.1
 
-jobs:
-  game-dlls:
+orbs:
+  # Codecov's official orb: uploads the coverage with Codecov's CLI, checked against its signature
+  # (needs gpg). The token is the project's CODECOV_TOKEN. Any 6.x; a new major version is taken by hand.
+  codecov: codecov/codecov@6
+
+executors:
+  dotnet:
     docker:
-      - image: cimg/base:current
+      - image: mcr.microsoft.com/dotnet/sdk:10.0
     resource_class: medium
+
+commands:
+  # The Valheim dedicated server in /tmp/valheim, with SteamCMD (32-bit: it needs the i386 C++ runtime).
+  valheim-server:
     steps:
       - run:
-          name: SteamCMD (32-bit, needs the i386 C++ runtime)
+          name: SteamCMD
           command: |
             sudo dpkg --add-architecture i386
             sudo apt-get update -qq
@@ -36,6 +54,31 @@ jobs:
                 && [ -f /tmp/valheim/valheim_server_Data/Managed/assembly_valheim.dll ] && break
               echo "SteamCMD attempt $attempt failed"; sleep 10
             done
+            [ -x /tmp/valheim/valheim_server.x86_64 ]
+
+  # BepInEx, ServersideQoL and YamlDotNet in /tmp/libs/mods, and the game's DLLs (game-dlls) in
+  # /tmp/libs/managed: what the plugin and its tests build against.
+  build-dependencies:
+    steps:
+      - attach_workspace:
+          at: /tmp/libs
+      - run:
+          name: Tools (zip, unzip)
+          command: apt-get update -qq && apt-get install -y -qq zip unzip > /dev/null
+      - run:
+          name: BepInEx, ServersideQoL and YamlDotNet from Thunderstore
+          command: tools/ci-deps.sh /tmp/libs/mods
+
+jobs:
+  game-dlls:
+    docker:
+      - image: cimg/base:current
+    resource_class: medium
+    steps:
+      - valheim-server
+      - run:
+          name: Keep the DLLs the plugin builds against
+          command: |
             mkdir -p /tmp/libs/managed
             for dll in assembly_valheim assembly_guiutils assembly_utils UnityEngine.CoreModule UnityEngine; do
               cp "/tmp/valheim/valheim_server_Data/Managed/$dll.dll" /tmp/libs/managed/
@@ -46,20 +89,62 @@ jobs:
           paths:
             - managed
 
-  package:
-    docker:
-      - image: mcr.microsoft.com/dotnet/sdk:10.0
-    resource_class: medium
+  tests:
+    executor: dotnet
     steps:
       - checkout
-      - attach_workspace:
-          at: /tmp/libs
+      - build-dependencies
+      - restore_cache:
+          keys:
+            - nuget-v1-{{ checksum "tests/ModerWarehousePlus.Tests/ModerWarehousePlus.Tests.csproj" }}-{{ checksum "ModerWarehousePlus.csproj" }}
+            # Else main's latest (a branch whose packages changed restores only what it adds).
+            - nuget-v1-
       - run:
-          name: Tools (zip, unzip)
-          command: apt-get update -qq && apt-get install -y -qq zip unzip > /dev/null
+          name: Build the tests (every warning is an error)
+          command: |
+            dotnet build tests/ModerWarehousePlus.Tests -c Release -warnaserror -p:ManagedDir=/tmp/libs/managed \
+              -p:BepInExCoreDir=/tmp/libs/mods/core -p:PluginsDir=/tmp/libs/mods/plugins
       - run:
-          name: BepInEx, ServersideQoL and YamlDotNet from Thunderstore
-          command: tools/ci-deps.sh /tmp/libs/mods
+          name: Unit tests
+          command: |
+            # Coverage on main only (Codecov reports main's).
+            coverage=()
+            if [ "$CIRCLE_BRANCH" = main ]; then
+              coverage=(--settings tests/coverage.runsettings --collect "Code Coverage" --results-directory /tmp/coverage)
+            fi
+            dotnet test tests/ModerWarehousePlus.Tests -c Release --no-build --blame-hang-timeout 5m "${coverage[@]}" \
+              --logger "junit;LogFilePath=/tmp/test-results/unit/results.xml" --logger "console;verbosity=normal"
+      # Saved from main only: branches reuse main's (each cache is kept 15 days and billed).
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - save_cache:
+                key: nuget-v1-{{ checksum "tests/ModerWarehousePlus.Tests/ModerWarehousePlus.Tests.csproj" }}-{{ checksum "ModerWarehousePlus.csproj" }}
+                paths:
+                  - ~/.nuget/packages
+            - run:
+                name: gpg (Codecov's CLI is checked against its signature) and the coverage report
+                command: |
+                  apt-get install -y -qq gnupg > /dev/null
+                  # Named for Codecov's CLI (its *coverage*.* pattern), not after the machine and the time.
+                  mkdir -p /tmp/upload
+                  report=$(find /tmp/coverage -name '*.cobertura.xml' | head -n 1)
+                  [ -n "$report" ] || { echo "No coverage report: Codecov would get nothing."; exit 1; }
+                  cp "$report" /tmp/upload/coverage.cobertura.xml
+            - codecov/upload:
+                dir: /tmp/upload
+                plugins: noop
+      - store_test_results:
+          path: /tmp/test-results
+      - store_artifacts:
+          path: /tmp/test-results
+
+  package:
+    executor: dotnet
+    steps:
+      - checkout
+      - build-dependencies
       - run:
           name: Build the package (every warning is an error)
           command: |
@@ -71,6 +156,23 @@ jobs:
           root: /tmp
           paths:
             - dist
+
+  server-smoke:
+    docker:
+      - image: cimg/base:current
+    # The server generates a new world on its first start: four cores and 8 GB keep that to a minute or two.
+    resource_class: large
+    steps:
+      - checkout
+      - attach_workspace:
+          at: /tmp
+      - valheim-server
+      - run:
+          name: The package in the dedicated server
+          no_output_timeout: 15m
+          command: tools/server-smoke.sh /tmp/valheim /tmp/dist/ModerWarehousePlus-*.zip
+      - store_artifacts:
+          path: /tmp/valheim/smoke-logs
 
   publish:
     docker:
@@ -93,10 +195,17 @@ jobs:
             python tools/publish.py "/tmp/dist/ModerWarehousePlus-$VERSION.zip" "$VERSION"
 
 workflows:
-  # Branches build the package; a tag vX.Y.Z builds it and publishes it.
+  # Every push: game-dlls, then tests and the package side by side, then the smoke test on the package.
+  # A tag vX.Y.Z runs the same and, once all passed, publishes.
   release:
     jobs:
       - game-dlls:
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
+      - tests:
+          requires:
+            - game-dlls
           filters:
             tags:
               only: /^v\d+\.\d+\.\d+$/
@@ -106,10 +215,18 @@ workflows:
           filters:
             tags:
               only: /^v\d+\.\d+\.\d+$/
+      - server-smoke:
+          requires:
+            - package
+          filters:
+            tags:
+              only: /^v\d+\.\d+\.\d+$/
       - publish:
           context: mod-token
           requires:
+            - tests
             - package
+            - server-smoke
           filters:
             branches:
               ignore: /.*/

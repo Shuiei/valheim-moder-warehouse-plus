@@ -287,7 +287,7 @@ internal static class WarehouseLocalization
 			.Replace("\n", "\\n");
 	}
 
-	private static Dictionary<string, string> English()
+	internal static Dictionary<string, string> English()
 	{
 		return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{
@@ -391,7 +391,7 @@ internal static class WarehouseLocalization
 		};
 	}
 
-	private static Dictionary<string, string> German()
+	internal static Dictionary<string, string> German()
 	{
 		return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 		{

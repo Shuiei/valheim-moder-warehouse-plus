@@ -1,0 +1,20 @@
+# Codecov (https://app.codecov.io/gh/Shuiei/valheim-moder-warehouse-plus): the unit tests' coverage of
+# the plugin, which CircleCI's tests job sends on main (branches send none). Which code counts is set
+# by tests/coverage.runsettings.
+# Informational only, unlike the Editor's 95% check: most of WarehouseProcessor works on the game's
+# live objects (chests, signs, inventories), which only a server with players near the warehouse has.
+# The unit tests cover the logic that does not need them; tools/server-smoke.sh checks the plugin in
+# a real server. Reference: https://docs.codecov.com/docs/codecovyml-reference
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  status:
+    project:
+      default:
+        informational: true
+    patch: off
+
+comment: false

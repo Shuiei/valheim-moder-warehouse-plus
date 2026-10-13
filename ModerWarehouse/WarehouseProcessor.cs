@@ -384,13 +384,13 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private static readonly Regex Marker = new Regex("^\\s*\\[WH:(?<id>[A-Za-z0-9_-]+):(?<role>IN|OUT|REQ|INFO|BOARD|STATS)\\](?<payload>[\\s\\S]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+	internal static readonly Regex Marker = new Regex("^\\s*\\[WH:(?<id>[A-Za-z0-9_-]+):(?<role>IN|OUT|REQ|INFO|BOARD|STATS)\\](?<payload>[\\s\\S]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-	private static readonly Regex IgnoreMarker = new Regex("^\\s*\\[WH:IGNORE\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+	internal static readonly Regex IgnoreMarker = new Regex("^\\s*\\[WH:IGNORE\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-	private static readonly Regex DeleteMarker = new Regex("^\\s*\\[WH:DELETE\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+	internal static readonly Regex DeleteMarker = new Regex("^\\s*\\[WH:DELETE\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-	private static readonly Regex CleanMarker = new Regex("^\\s*\\[WH:CLEAN\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+	internal static readonly Regex CleanMarker = new Regex("^\\s*\\[WH:CLEAN\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
 	private const string RequestWarehouseKey = "ModerWarehouse.RequestWarehouse";
 
@@ -472,7 +472,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static readonly Dictionary<string, string> PrefabNames = new Dictionary<string, string>();
 
-	private static readonly Dictionary<string, HashSet<string>> AliasOwners = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+	internal static readonly Dictionary<string, HashSet<string>> AliasOwners = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
 	private static bool _germanNamesLoaded;
 
@@ -594,7 +594,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private readonly Dictionary<ZDOID, DateTime> _inputInUseSince = new Dictionary<ZDOID, DateTime>();
 
-	private const int MaxWildcardItems = 10;
+	internal const int MaxWildcardItems = 10;
 
 	private static readonly Dictionary<int, bool> SignPrefabs = new Dictionary<int, bool>();
 
@@ -715,9 +715,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			Directory.CreateDirectory(text);
 			// First start after switching from the original mod: its cache is copied, and left
 			// where it is for going back.
-			if (!File.Exists(_stockCachePath) && File.Exists(OriginalStockCachePath))
+			if (WarehousePlugin.CopyIfMissing(OriginalStockCachePath, _stockCachePath))
 			{
-				File.Copy(OriginalStockCachePath, _stockCachePath);
 				this.Logger.LogInfo((object)("Stock cache copied from " + OriginalStockCachePath + "."));
 			}
 			if (!File.Exists(_stockCachePath))
@@ -1139,7 +1138,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return ResolveLanguage(string.Empty);
 	}
 
-	private static string ResolveLanguage(string payload)
+	internal static string ResolveLanguage(string payload)
 	{
 		Match match = Regex.Match(payload ?? string.Empty, "(?:^|[\\r\\n])\\s*LANG(?:UAGE)?\\s*=\\s*(?<language>[A-Za-z][A-Za-z0-9_-]*)\\s*(?:$|[\\r\\n])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 		return WarehouseLocalization.Resolve(match.Success ? match.Groups["language"].Value : ConfigBase<WarehouseConfig>.Instance.Language.Value);
@@ -1596,7 +1595,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return true;
 	}
 
-	private static float ParseInputRadius(string payload)
+	internal static float ParseInputRadius(string payload)
 	{
 		float num = Mathf.Max(10f, ConfigBase<WarehouseConfig>.Instance.Radius.Value);
 		float num2 = Mathf.Clamp(ConfigBase<WarehouseConfig>.Instance.MinimumRadius.Value, 1f, num);
@@ -3436,7 +3435,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return -1;
 	}
 
-	private static int BestSubstringDistance(string query, string name)
+	internal static int BestSubstringDistance(string query, string name)
 	{
 		if (name.Length <= query.Length)
 		{
@@ -3455,7 +3454,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return num;
 	}
 
-	private static int DamerauDistance(string left, string right)
+	internal static int DamerauDistance(string left, string right)
 	{
 		if (string.IsNullOrEmpty(left))
 		{
@@ -3489,7 +3488,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return array[left.Length, right.Length];
 	}
 
-	private static int LevenshteinDistance(string left, string right)
+	internal static int LevenshteinDistance(string left, string right)
 	{
 		if (string.IsNullOrEmpty(left))
 		{
@@ -3515,7 +3514,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return array[right.Length];
 	}
 
-	private static bool TryParseRequest(string payload, out string query, out int amount)
+	internal static bool TryParseRequest(string payload, out string query, out int amount)
 	{
 		query = string.Empty;
 		amount = 0;
@@ -3530,7 +3529,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	// Local patch 4: "craft <item> [lvl N] [xN]" pulls the recipe's materials into OUT,
 	// counting what OUT already holds so only the missing amount is withdrawn.
-	private static bool TryParseCraftRequest(string payload, out string query, out int count, out int level)
+	internal static bool TryParseCraftRequest(string payload, out string query, out int count, out int level)
 	{
 		query = string.Empty;
 		count = 1;
@@ -3803,7 +3802,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return string.Join("\n", list2);
 	}
 
-	private static bool TryParseWildcardRequest(string payload, out Regex pattern, out string display, out int amount)
+	internal static bool TryParseWildcardRequest(string payload, out Regex pattern, out string display, out int amount)
 	{
 		pattern = null;
 		display = string.Empty;
@@ -3823,18 +3822,18 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	}
 
 	// "*frost resistance" -> ^.*frostresistance$ over normalized names (punctuation such as ':' ignored).
-	private static Regex WildcardPattern(string text)
+	internal static Regex WildcardPattern(string text)
 	{
 		return new Regex("^" + string.Join(".*", from part in (text ?? string.Empty).Split(new char[1] { '*' })
 			select Regex.Escape(Normalize(part))) + "$", RegexOptions.CultureInvariant);
 	}
 
-	private static bool IsStatus(string payload)
+	internal static bool IsStatus(string payload)
 	{
 		return WarehouseLocalization.StartsWithAnyTranslation(payload, "request.done", "request.partial", "request.output_full", "request.not_found", "request.wildcard_too_many", "request.craft_header", "request.craft_header_level", "request.craft_unknown", "request.craft_max_level", "request.error", "request.error_example", "request.suggestions", "request.shown_on_board");
 	}
 
-	private static bool IsRequestPrompt(string payload)
+	internal static bool IsRequestPrompt(string payload)
 	{
 		string text = (payload ?? string.Empty).Trim();
 		if (!WarehouseLocalization.StartsWithAnyTranslation(text, "request.idle", "request.title") && !text.Equals("REQ", StringComparison.OrdinalIgnoreCase))
@@ -3886,7 +3885,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		vars.SetText(text);
 	}
 
-	private static bool TryParseTargets(string payload, out Dictionary<string, int> targets)
+	internal static bool TryParseTargets(string payload, out Dictionary<string, int> targets)
 	{
 		targets = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 		foreach (string item in (from x in (payload ?? string.Empty).Split(new char[4] { ',', ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
@@ -3908,7 +3907,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return string.Join("\n", targets.Select((KeyValuePair<string, int> x) => x.Key + "\t" + x.Value.ToString(CultureInfo.InvariantCulture)));
 	}
 
-	private static Dictionary<string, int> DeserializeTargets(string value)
+	internal static Dictionary<string, int> DeserializeTargets(string value)
 	{
 		Dictionary<string, int> dictionary = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 		string[] array = (value ?? string.Empty).Split(new char[1] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
@@ -4975,7 +4974,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private static int ParseStatsPage(string normalized, List<int> numbers, bool combined)
+	internal static int ParseStatsPage(string normalized, List<int> numbers, bool combined)
 	{
 		if (normalized.Contains("ubersicht") || normalized.Contains("übersicht") || normalized.Contains("overview") || normalized.Contains("heute") || normalized.Contains("today"))
 		{
@@ -5016,7 +5015,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return TokenMessage(language, key, values[index].Key, values[index].Value, color);
 	}
 
-	private static string PercentChange(string language, int current, int previous)
+	internal static string PercentChange(string language, int current, int previous)
 	{
 		if (previous <= 0)
 		{
@@ -5030,7 +5029,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return ((num > 0.0) ? "+" : string.Empty) + num.ToString("0", CultureInfo.InvariantCulture) + "%";
 	}
 
-	private static string DayLabel(int key)
+	internal static string DayLabel(int key)
 	{
 		return (key % 100).ToString("00", CultureInfo.InvariantCulture) + "." + (key / 100 % 100).ToString("00", CultureInfo.InvariantCulture) + ".";
 	}
@@ -5141,7 +5140,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private static string Initial(string name)
+	internal static string Initial(string name)
 	{
 		if (!string.IsNullOrWhiteSpace(name))
 		{
@@ -5150,7 +5149,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return "-";
 	}
 
-	private static string FormatAmount(int amount)
+	internal static string FormatAmount(int amount)
 	{
 		if (amount < 1000)
 		{
@@ -5163,7 +5162,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return ((double)amount / 1000000.0).ToString("0.#", CultureInfo.InvariantCulture) + "M";
 	}
 
-	private static string FormatSignedAmount(int amount)
+	internal static string FormatSignedAmount(int amount)
 	{
 		if (amount >= 0)
 		{
@@ -5397,7 +5396,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private static IEnumerable<string> GermanAliases(string name)
+	internal static IEnumerable<string> GermanAliases(string name)
 	{
 		if (name == null)
 		{
@@ -5645,7 +5644,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return (string)obj;
 	}
 
-	private static string Normalize(string value)
+	internal static string Normalize(string value)
 	{
 		StringBuilder stringBuilder = new StringBuilder();
 		string text = Regex.Replace(value ?? string.Empty, "<.*?>", string.Empty).ToLowerInvariant();
@@ -5680,18 +5679,42 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return value;
 	}
 
-	private static string PlainText(string value)
+	internal static string PlainText(string value)
 	{
 		return Regex.Replace(value ?? string.Empty, "<.*?>", string.Empty);
 	}
 
 	// Local patch 9: ServersideQoL ContainerSigns writes a chest's contents between these markers.
-	private static bool IsContainerSignsList(string raw)
+	internal static bool IsContainerSignsList(string raw)
 	{
 		return (raw ?? string.Empty).IndexOf("<i ls>", StringComparison.Ordinal) >= 0;
 	}
 
 	private const string ContainerSignsGuid = "ArgusMagnus.ServersideQoL.ContainerSigns";
+
+	// A sign's text names what its chest holds: not empty or punctuation only (a "..." or "•" sign
+	// waiting to be adopted), not a ContainerSigns contents list, not a warehouse marker.
+	internal static bool IsLabelText(string raw)
+	{
+		string plain = PlainText(raw);
+		return !IsContainerSignsList(raw) && !IsBlankLabel(plain) && !Marker.IsMatch(plain) && !IgnoreMarker.IsMatch(plain) && !DeleteMarker.IsMatch(plain) && !CleanMarker.IsMatch(plain);
+	}
+
+	// The label sign of each managed chest, from signs whose text is a label (IsLabelText): one per
+	// chest, the warehouse's own automatic label before a player's, else the first. Signs of no chest
+	// or of a chest outside managed are left out.
+	internal static Dictionary<TChest, TSign> ChooseChestLabels<TChest, TSign>(IEnumerable<(TSign Sign, TChest Chest, bool AutoManaged)> labels, ISet<TChest> managed) where TChest : class
+	{
+		Dictionary<TChest, (TSign Sign, bool AutoManaged)> chosen = new Dictionary<TChest, (TSign, bool)>();
+		foreach ((TSign sign, TChest chest, bool autoManaged) in labels)
+		{
+			if (chest != null && managed.Contains(chest) && (!chosen.TryGetValue(chest, out var current) || (!current.AutoManaged && autoManaged)))
+			{
+				chosen[chest] = (sign, autoManaged);
+			}
+		}
+		return chosen.ToDictionary((KeyValuePair<TChest, (TSign Sign, bool AutoManaged)> x) => x.Key, (KeyValuePair<TChest, (TSign Sign, bool AutoManaged)> x) => x.Value.Sign);
+	}
 
 	// ContainerSigns is optional: nothing here references it, it is only looked for by id.
 	private static bool ContainerSignsLoaded => BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey(ContainerSignsGuid);
@@ -5708,28 +5731,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			return;
 		}
-		HashSet<ServersideQoLZDO> chests = new HashSet<ServersideQoLZDO>(managed);
-		Dictionary<ServersideQoLZDO, ServersideQoLZDO> labelSigns = new Dictionary<ServersideQoLZDO, ServersideQoLZDO>();
-		foreach (ServersideQoLZDO sign in StorageSigns)
-		{
-			if (IsRememberedRequest(sign) || IsRememberedInfo(sign) || IsRememberedBoard(sign) || IsRememberedStats(sign) || sign.ZDO.GetBool("ModerWarehouse.HelpChild", false))
-			{
-				continue;
-			}
-			string text = sign.Vars.GetText("") ?? string.Empty;
-			string plain = PlainText(text);
-			if (IsContainerSignsList(text) || IsBlankLabel(plain) || Marker.IsMatch(plain) || IgnoreMarker.IsMatch(plain) || DeleteMarker.IsMatch(plain) || CleanMarker.IsMatch(plain))
-			{
-				continue;
-			}
-			ServersideQoLZDO chest = LinkedOrNearestContainer(sign, containers, range2);
-			// One label per chest; the warehouse's own automatic label wins over a player's.
-			if (chest != null && chests.Contains(chest) && (!labelSigns.TryGetValue(chest, out var current) || (!current.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false) && sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false))))
-			{
-				labelSigns[chest] = sign;
-			}
-		}
-		foreach (KeyValuePair<ServersideQoLZDO, ServersideQoLZDO> pair in labelSigns)
+		IEnumerable<(ServersideQoLZDO Sign, ServersideQoLZDO Chest, bool AutoManaged)> labels = from sign in StorageSigns
+			where !IsRememberedRequest(sign) && !IsRememberedInfo(sign) && !IsRememberedBoard(sign) && !IsRememberedStats(sign) && !sign.ZDO.GetBool("ModerWarehouse.HelpChild", false)
+			where IsLabelText(sign.Vars.GetText("") ?? string.Empty)
+			select (sign, LinkedOrNearestContainer(sign, containers, range2), sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false));
+		foreach (KeyValuePair<ServersideQoLZDO, ServersideQoLZDO> pair in ChooseChestLabels(labels, new HashSet<ServersideQoLZDO>(managed)))
 		{
 			string label = pair.Value.Vars.GetText("") ?? string.Empty;
 			if (string.Equals(pair.Key.Vars.GetText("") ?? string.Empty, label, StringComparison.Ordinal))
@@ -5749,7 +5755,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	// Local patch 9: "Wood 521" (an item name and a count, ContainerSigns' "{0} {1}") -> "Wood", when
 	// the name is a known item and the whole text is not.
-	private static bool TryStripContentCount(string plain, out string name)
+	internal static bool TryStripContentCount(string plain, out string name)
 	{
 		name = null;
 		Match match = Regex.Match((plain ?? string.Empty).Trim(), "^(?<name>.*\\D)\\s+\\d+$", RegexOptions.CultureInvariant);
@@ -5766,7 +5772,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return true;
 	}
 
-	private static bool IsBlankLabel(string value)
+	internal static bool IsBlankLabel(string value)
 	{
 		if (!string.IsNullOrWhiteSpace(value))
 		{

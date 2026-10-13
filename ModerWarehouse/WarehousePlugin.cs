@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
@@ -22,29 +23,45 @@ public sealed class WarehousePlugin : ServersideQoLPluginBase<WarehousePlugin, W
 
 	protected override WarehouseConfig CreateConfigSingleton(ConfigFile file, Logger logger)
 	{
-		CopyOriginalSettings(file, logger);
+		CopyOriginalSettings(file, x => logger.LogInfo(x), x => logger.LogWarning(x));
 		return new WarehouseConfig(file, logger);
 	}
 
 	// First start: the original mod's settings are copied to this mod's file, so a server switching
-	// over keeps them. The original file stays, for going back to the original mod.
-	private static void CopyOriginalSettings(ConfigFile file, Logger logger)
+	// over keeps them; the original file stays, for going back to the original mod. Nothing is copied
+	// when the settings are in another file (ServersideQoL's UnifiedConfig). It logs through info and
+	// warning rather than the game's logger, which needs the game's clock (and so the game).
+	internal static void CopyOriginalSettings(ConfigFile file, Action<string> info, Action<string> warning)
 	{
-		string original = Path.Combine(Paths.ConfigPath, OriginalGuid + ".cfg");
-		if (Path.GetFileName(file.ConfigFilePath) != Guid + ".cfg" || File.Exists(file.ConfigFilePath) || !File.Exists(original))
+		if (Path.GetFileName(file.ConfigFilePath) != Guid + ".cfg")
 		{
 			return;
 		}
 		try
 		{
-			File.Copy(original, file.ConfigFilePath);
-			file.Reload();
-			logger.LogInfo("Settings copied from " + OriginalGuid + ".cfg to " + Guid + ".cfg.");
+			if (CopyIfMissing(Path.Combine(Paths.ConfigPath, OriginalGuid + ".cfg"), file.ConfigFilePath))
+			{
+				file.Reload();
+				info("Settings copied from " + OriginalGuid + ".cfg to " + Guid + ".cfg.");
+			}
 		}
 		catch (IOException ex)
 		{
-			logger.LogWarning("Could not copy the settings from " + OriginalGuid + ".cfg: " + ex.Message);
+			warning("Could not copy the settings from " + OriginalGuid + ".cfg: " + ex.Message);
 		}
+	}
+
+	// Copies source to destination when destination does not exist yet and source does; true when it
+	// copied. The source stays where it is.
+	internal static bool CopyIfMissing(string source, string destination)
+	{
+		if (File.Exists(destination) || !File.Exists(source))
+		{
+			return false;
+		}
+		Directory.CreateDirectory(Path.GetDirectoryName(destination));
+		File.Copy(source, destination);
+		return true;
 	}
 
 	protected override void RegisterProcessors(IProcessorCollection processors)
