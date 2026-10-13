@@ -2,11 +2,13 @@ using Xunit;
 
 namespace ModerWarehouse.Tests;
 
+// The history's days follow the warehouse's clock, which TestWorld sets: "Game state".
+[Collection("Game state")]
 public class WarehouseStatsHistoryTests
 {
     private static int Key(int daysAgo)
     {
-        DateTime day = DateTime.UtcNow.Date.AddDays(-daysAgo);
+        DateTime day = WarehouseClock.UtcNow.Date.AddDays(-daysAgo);
         return day.Year * 10000 + day.Month * 100 + day.Day;
     }
 

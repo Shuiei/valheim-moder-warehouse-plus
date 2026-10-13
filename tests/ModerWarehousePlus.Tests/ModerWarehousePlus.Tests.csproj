@@ -20,12 +20,23 @@
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageReference Include="JunitXml.TestLogger" Version="7.1.0" />
+    <!-- Stands in for the game in the warehouse tests (Support/World): patches the code that would call
+         Unity's engine or the live world. 2.4.3 is the first that patches on .NET 10. -->
+    <PackageReference Include="Lib.Harmony" Version="2.4.3" />
   </ItemGroup>
   <ItemGroup>
     <!-- Built first, then referenced as a DLL: a .NET Framework project is not referenced from .NET 10. -->
     <ProjectReference Include="../../ModerWarehousePlus.csproj" ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true" />
     <Reference Include="ModerWarehousePlus"><HintPath>../../bin/$(Configuration)/net472/ModerWarehousePlus.dll</HintPath></Reference>
   </ItemGroup>
+  <!-- The game's assembly as ServersideQoL's preloader patcher makes it in the game (GamePatcher),
+       in place of the one copied from the server. -->
+  <ItemGroup>
+    <ProjectReference Include="../GamePatcher/GamePatcher.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="PatchGameAssembly" AfterTargets="CopyFilesToOutputDirectory">
+    <Exec Command="dotnet &quot;$(MSBuildThisFileDirectory)../GamePatcher/bin/$(Configuration)/net10.0/GamePatcher.dll&quot; &quot;$(PatchersDir)/ServersideQoL.Patchers.dll&quot; &quot;$(ManagedDir)/assembly_valheim.dll&quot; &quot;$(OutDir)assembly_valheim.dll&quot;" />
+  </Target>
   <ItemGroup>
     <!-- The package's files, for Package/PackageTests. -->
     <None Include="../../thunderstore/manifest.json;../../thunderstore/CHANGELOG.md;../../thunderstore/README.md" LinkBase="package" CopyToOutputDirectory="PreserveNewest" />

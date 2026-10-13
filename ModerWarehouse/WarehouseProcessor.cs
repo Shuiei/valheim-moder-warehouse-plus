@@ -695,7 +695,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		try
 		{
 			Directory.CreateDirectory(text);
-			File.WriteAllText(_performanceLogPath, WarehousePlugin.Name + " " + WarehousePlugin.Version + " performance log\r\n" + $"Started UTC: {DateTime.UtcNow:O}\r\n" + "Revision: spatial-local-20260923; SUMMARY phase times are independent maxima; SLOW sampled at most once per 10s; skipped means throttled callbacks, not failed work.\r\nUTC | kind | warehouse | state | cycles | skipped | avg_ms | max_ms | topology_ms | classify_ms | display_ms | transfer_ms | containers | signs | stores | inventory_reads | peers | ping_avg_ms | ping_max_ms | local_quality_min | remote_quality_min | out_Bps | in_Bps\r\n", Encoding.UTF8);
+			File.WriteAllText(_performanceLogPath, WarehousePlugin.Name + " " + WarehousePlugin.Version + " performance log\r\n" + $"Started UTC: {WarehouseClock.UtcNow:O}\r\n" + "Revision: spatial-local-20260923; SUMMARY phase times are independent maxima; SLOW sampled at most once per 10s; skipped means throttled callbacks, not failed work.\r\nUTC | kind | warehouse | state | cycles | skipped | avg_ms | max_ms | topology_ms | classify_ms | display_ms | transfer_ms | containers | signs | stores | inventory_reads | peers | ping_avg_ms | ping_max_ms | local_quality_min | remote_quality_min | out_Bps | in_Bps\r\n", Encoding.UTF8);
 			DeleteLegacyLog(Path.Combine(Paths.BepInExRootPath, "ModerWarehouse-performance.log"), "performance");
 			this.Logger.LogInfo((object)("Performance log reset: " + _performanceLogPath));
 		}
@@ -1007,9 +1007,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				if (IsStatus(text7) && !_requestClearAt.ContainsKey(zdo))
 				{
-					_requestClearAt[zdo] = DateTime.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
+					_requestClearAt[zdo] = WarehouseClock.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
 				}
-				if (_requestClearAt.TryGetValue(zdo, out var value) && DateTime.UtcNow >= value)
+				if (_requestClearAt.TryGetValue(zdo, out var value) && WarehouseClock.UtcNow >= value)
 				{
 					_requestClearAt.Remove(zdo);
 					WriteRequestPrompt(zdo, text2, LanguageForWarehouse(text2));
@@ -1025,10 +1025,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				if (!_requestClearAt.TryGetValue(zdo, out var value2))
 				{
-					value2 = DateTime.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
+					value2 = WarehouseClock.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
 					_requestClearAt[zdo] = value2;
 				}
-				if (DateTime.UtcNow >= value2)
+				if (WarehouseClock.UtcNow >= value2)
 				{
 					WriteRequestPrompt(zdo, text2, LanguageForWarehouse(text2));
 					_requestClearAt.Remove(zdo);
@@ -1058,9 +1058,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				else if (!_orphanBoardSeenAt.TryGetValue(group, out value3))
 				{
-					_orphanBoardSeenAt[group] = DateTime.UtcNow;
+					_orphanBoardSeenAt[group] = WarehouseClock.UtcNow;
 				}
-				else if ((DateTime.UtcNow - value3).TotalSeconds >= 10.0)
+				else if ((WarehouseClock.UtcNow - value3).TotalSeconds >= 10.0)
 				{
 					List<ServersideQoLZDO> list2 = _signs.Where((ServersideQoLZDO sign) => sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == group).ToList();
 					foreach (ServersideQoLZDO item4 in list2)
@@ -1151,7 +1151,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			return;
 		}
 		string text = id.Trim();
-		DateTime utcNow = DateTime.UtcNow;
+		DateTime utcNow = WarehouseClock.UtcNow;
 		if (_warehousesRunning.Contains(text))
 		{
 			PerformanceWindow(text).Skipped++;
@@ -1191,13 +1191,13 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			_storageSigns = null;
 			_localStorage = null;
 			_warehousesRunning.Remove(text);
-			_lastCompleted[text] = DateTime.UtcNow;
-			_warehouseNextRun[text] = DateTime.UtcNow.AddSeconds(value4);
+			_lastCompleted[text] = WarehouseClock.UtcNow;
+			_warehouseNextRun[text] = WarehouseClock.UtcNow.AddSeconds(value4);
 			RecordPerformance(text, flag, stopwatch.ElapsedMilliseconds);
 			long num2 = (flag ? 150 : 250);
-			if (stopwatch.ElapsedMilliseconds >= num2 && (!_slowCycleLoggedAt.TryGetValue(text, out var value5) || (DateTime.UtcNow - value5).TotalSeconds >= 120.0))
+			if (stopwatch.ElapsedMilliseconds >= num2 && (!_slowCycleLoggedAt.TryGetValue(text, out var value5) || (WarehouseClock.UtcNow - value5).TotalSeconds >= 120.0))
 			{
-				_slowCycleLoggedAt[text] = DateTime.UtcNow;
+				_slowCycleLoggedAt[text] = WarehouseClock.UtcNow;
 				this.Logger.LogWarning((object)($"Warehouse '{text}': slow coordinated cycle {stopwatch.ElapsedMilliseconds} ms " + "(board " + (flag ? "awake" : "sleeping") + ")."));
 			}
 		}
@@ -1397,7 +1397,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		if (!_warehouseStockSnapshots.TryGetValue(id, out var value) || !StockEqual(value, dictionary2))
 		{
 			_warehouseStockSnapshots[id] = dictionary2;
-			_warehouseStockTimes[id] = DateTime.UtcNow;
+			_warehouseStockTimes[id] = WarehouseClock.UtcNow;
 			SaveStockCache();
 		}
 		_cycleClassifyMs = stopwatch.ElapsedMilliseconds - _cycleTopologyMs;
@@ -1507,7 +1507,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		if (num5 > 0)
 		{
-			_deliveryNotices[id] = new DeliveryNotice(dictionary3, DateTime.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.DeliveryNoticeSeconds.Value)));
+			_deliveryNotices[id] = new DeliveryNotice(dictionary3, WarehouseClock.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.DeliveryNoticeSeconds.Value)));
 			this.Logger.LogInfo((object)($"Warehouse '{id}': stored {num5} item(s) into " + $"{hashSet.Count} chest(s); {list7.Count} candidate chest(s) scanned."));
 		}
 		if (val != null)
@@ -1554,7 +1554,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			return false;
 		}
 		ZDOID uid = input.ZDO.m_uid;
-		DateTime utcNow = DateTime.UtcNow;
+		DateTime utcNow = WarehouseClock.UtcNow;
 		if (!_inputInUseSince.TryGetValue(uid, out var value2))
 		{
 			_inputInUseSince[uid] = utcNow;
@@ -2002,7 +2002,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			array2[8] = node.Radius.ToString("R", CultureInfo.InvariantCulture);
 			return string.Concat(array2);
 		}).OrderBy<string, string>((string result) => result, StringComparer.Ordinal)) + "|" + string.Join(";", list.OrderBy<string, string>((string result) => result, StringComparer.Ordinal)) + "|" + ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value.ToString("R", CultureInfo.InvariantCulture);
-		if (hashSet.Any((string uid) => !_globalInputErrors.ContainsKey(uid)) || text2 != _validatedTopology || (DateTime.UtcNow - _globalInputValidationAt).TotalMinutes >= 5.0)
+		if (hashSet.Any((string uid) => !_globalInputErrors.ContainsKey(uid)) || text2 != _validatedTopology || (WarehouseClock.UtcNow - _globalInputValidationAt).TotalMinutes >= 5.0)
 		{
 			RefreshGlobalInputValidation(markerRange2);
 			_validatedTopology = text2;
@@ -2130,7 +2130,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				SaveStockCache();
 			}
-			_globalInputValidationAt = DateTime.UtcNow;
+			_globalInputValidationAt = WarehouseClock.UtcNow;
 			this.Logger.LogInfo((object)($"Global warehouse topology: {list4.Count} accepted, " + $"{list3.Count - list4.Count + num} blocked IN marker(s)."));
 		}
 		catch (Exception ex)
@@ -2478,7 +2478,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			_pendingLabels.Remove(chest);
 			return text;
 		}
-		DateTime utcNow = DateTime.UtcNow;
+		DateTime utcNow = WarehouseClock.UtcNow;
 		string text2 = item?.m_shared?.m_name ?? string.Empty;
 		if (!_pendingLabels.TryGetValue(chest, out var value2) || value2.ItemType != text2)
 		{
@@ -3029,7 +3029,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			list.Add(text2);
 		}
 		WriteStatus(id, request.Sign, string.Join("\n", list));
-		_requestClearAt[request.Sign] = DateTime.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
+		_requestClearAt[request.Sign] = WarehouseClock.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
 	}
 
 	private string ProcessSingleRequest(string id, string language, string query, int amount, IInventory output, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, out int locallyAvailable)
@@ -3159,7 +3159,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		int num2 = Math.Max(1, (list2.Count + 12 - 1) / 12);
 		double value = ((num2 == 1) ? 10.0 : ((double)num2 * 8.0 * 3.0));
-		_requestSearchNotices[localId] = new RequestSearchNotice(query, list2, DateTime.UtcNow, DateTime.UtcNow.AddSeconds(value));
+		_requestSearchNotices[localId] = new RequestSearchNotice(query, list2, WarehouseClock.UtcNow, WarehouseClock.UtcNow.AddSeconds(value));
 		return WarehouseLocalization.Format(language, "request.shown_on_board", query, list2.Count);
 	}
 
@@ -3321,7 +3321,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			num3 = stopwatch.ElapsedMilliseconds - num - num2;
 			bool result = false;
-			DateTime utcNow = DateTime.UtcNow;
+			DateTime utcNow = WarehouseClock.UtcNow;
 			foreach (PersistedWarehouse node in validNodes)
 			{
 				float radius2 = node.Radius * node.Radius;
@@ -3983,11 +3983,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		else if (!_helpPendingAt.TryGetValue(inputSign, out value))
 		{
-			_helpPendingAt[inputSign] = DateTime.UtcNow;
+			_helpPendingAt[inputSign] = WarehouseClock.UtcNow;
 		}
 		else
 		{
-			if ((DateTime.UtcNow - value).TotalSeconds < 5.0)
+			if ((WarehouseClock.UtcNow - value).TotalSeconds < 5.0)
 			{
 				return;
 			}
@@ -4188,10 +4188,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			if (!_boardEnsurePendingAt.TryGetValue(group, out var value))
 			{
-				_boardEnsurePendingAt[group] = DateTime.UtcNow;
+				_boardEnsurePendingAt[group] = WarehouseClock.UtcNow;
 				return;
 			}
-			if ((DateTime.UtcNow - value).TotalSeconds < 5.0)
+			if ((WarehouseClock.UtcNow - value).TotalSeconds < 5.0)
 			{
 				return;
 			}
@@ -4293,10 +4293,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			if (!_statsEnsurePendingAt.TryGetValue(group, out var value))
 			{
-				_statsEnsurePendingAt[group] = DateTime.UtcNow;
+				_statsEnsurePendingAt[group] = WarehouseClock.UtcNow;
 				return;
 			}
-			if ((DateTime.UtcNow - value).TotalSeconds < 5.0)
+			if ((WarehouseClock.UtcNow - value).TotalSeconds < 5.0)
 			{
 				return;
 			}
@@ -4421,7 +4421,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			value.Page = Math.Max(1, result);
 		}
-		value.ChangedAt = DateTime.UtcNow;
+		value.ChangedAt = WarehouseClock.UtcNow;
 		_boardControls[group] = value;
 		this.Logger.LogInfo((object)("Stock board '" + group + "': filter='" + (value.Prefix ?? "ALLE") + "', page=" + (value.Page.HasValue ? value.Page.Value.ToString() : "1") + " for 60 seconds."));
 	}
@@ -4532,7 +4532,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				value2.Awake = true;
 				value2.Changes = CalculateChanges(value2.Baseline, dictionary);
 				value2.Baseline = CloneSnapshot(dictionary);
-				value2.SummaryUntil = DateTime.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.VisitSummarySeconds.Value));
+				value2.SummaryUntil = WarehouseClock.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.VisitSummarySeconds.Value));
 			}
 			if (!flag)
 			{
@@ -4551,7 +4551,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			if (_requestSearchNotices.TryGetValue(id, out var value3))
 			{
-				if (DateTime.UtcNow < value3.Until)
+				if (WarehouseClock.UtcNow < value3.Until)
 				{
 					WriteRequestSearchBoard(dictionary2, id, language, value3, text, text2);
 					continue;
@@ -4560,14 +4560,14 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			if (_deliveryNotices.TryGetValue(id, out var value4))
 			{
-				if (DateTime.UtcNow < value4.Until)
+				if (WarehouseClock.UtcNow < value4.Until)
 				{
 					WriteBoardMessage(dictionary2, id, language, WarehouseLocalization.Text(language, "board.deposited"), value4.Items.Select((KeyValuePair<string, int> x) => new BoardMessage(x.Key, "+" + FormatAmount(x.Value), "#80ff80")).ToList(), text, text2);
 					continue;
 				}
 				_deliveryNotices.Remove(id);
 			}
-			if (DateTime.UtcNow < value2.SummaryUntil && value2.Changes.Count > 0)
+			if (WarehouseClock.UtcNow < value2.SummaryUntil && value2.Changes.Count > 0)
 			{
 				WriteBoardMessage(dictionary2, id, language, WarehouseLocalization.Text(language, "board.since_visit"), value2.Changes.Select((StockChange x) => new BoardMessage(x.Name, ((x.Amount > 0) ? "+" : string.Empty) + FormatSignedAmount(x.Amount), (x.Amount > 0) ? "#80ff80" : "#ffb347")).ToList(), text, text2);
 				continue;
@@ -4575,7 +4575,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			BoardControl boardControl = null;
 			if (_boardControls.TryGetValue(item.Key, out var value5))
 			{
-				if ((DateTime.UtcNow - value5.ChangedAt).TotalSeconds >= 60.0)
+				if ((WarehouseClock.UtcNow - value5.ChangedAt).TotalSeconds >= 60.0)
 				{
 					_boardControls.Remove(item.Key);
 				}
@@ -4593,7 +4593,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			bool flag2 = boardControl == null && network.Count((WarehouseNode x) => x.Valid) > 1;
 			int num7 = Math.Max(1, (list2.Count + 12 - 1) / 12) + (flag2 ? 1 : 0);
 			double num8 = Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.BoardPageSeconds.Value);
-			int num9 = ((boardControl == null) ? ((int)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num8) % num7) : Mathf.Clamp((boardControl.Page ?? 1) - 1, 0, num7 - 1));
+			int num9 = ((boardControl == null) ? ((int)(WarehouseClock.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num8) % num7) : Mathf.Clamp((boardControl.Page ?? 1) - 1, 0, num7 - 1));
 			if (flag2 && num9 == 0)
 			{
 				NetworkOverview networkOverview = GetNetworkOverview(language, network, containers, markerRange2, registry);
@@ -4629,7 +4629,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	{
 		string text = WarehouseLocalization.Resolve(language) + "|" + string.Join("|", from x in network.Where((WarehouseNode x) => x.Valid).OrderBy<WarehouseNode, string>((WarehouseNode x) => x.Id, StringComparer.OrdinalIgnoreCase)
 			select x.Id.ToUpperInvariant() + ":" + x.Radius.ToString("0.###", CultureInfo.InvariantCulture) + ":" + ((object)x.Input.ZDO.GetPosition()).ToString());
-		if (_networkOverview != null && !_networkOverviewDirty && _networkOverview.Signature == text && (DateTime.UtcNow - _networkOverviewAt).TotalSeconds < (double)Math.Max(3f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value))
+		if (_networkOverview != null && !_networkOverviewDirty && _networkOverview.Signature == text && (WarehouseClock.UtcNow - _networkOverviewAt).TotalSeconds < (double)Math.Max(3f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value))
 		{
 			return _networkOverview;
 		}
@@ -4662,7 +4662,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.stock_world"), FormatAmount(num2), "#80ff80"));
 		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.types_world"), hashSet.Count.ToString(CultureInfo.InvariantCulture), "#80ff80"));
 		_networkOverview = new NetworkOverview(text, list);
-		_networkOverviewAt = DateTime.UtcNow;
+		_networkOverviewAt = WarehouseClock.UtcNow;
 		_networkOverviewDirty = false;
 		return _networkOverview;
 	}
@@ -4683,7 +4683,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			StatsControl statsControl = null;
 			if (_statsControls.TryGetValue(item.Key, out var value2))
 			{
-				if ((DateTime.UtcNow - value2.ChangedAt).TotalSeconds >= 60.0)
+				if ((WarehouseClock.UtcNow - value2.ChangedAt).TotalSeconds >= 60.0)
 				{
 					_statsControls.Remove(item.Key);
 				}
@@ -4710,7 +4710,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			double num3 = Math.Max(3f, ConfigBase<WarehouseConfig>.Instance.BoardPageSeconds.Value);
 			int num4 = ((network.Count((WarehouseNode x) => x.Valid) > 1) ? 5 : 4);
-			int num5 = ((statsControl != null && statsControl.Page.HasValue) ? (statsControl.Page.Value - 1) : ((int)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num3) % num4));
+			int num5 = ((statsControl != null && statsControl.Page.HasValue) ? (statsControl.Page.Value - 1) : ((int)(WarehouseClock.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num3) % num4));
 			int num6 = statsControl?.Days ?? (num5 switch
 			{
 				3 => 90, 
@@ -4899,7 +4899,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				else
 				{
-					int num15 = Math.Max(0, 60 - (int)(DateTime.UtcNow - statsControl.ChangedAt).TotalSeconds);
+					int num15 = Math.Max(0, 60 - (int)(WarehouseClock.UtcNow - statsControl.ChangedAt).TotalSeconds);
 					string text5 = (statsControl.Days.HasValue ? WarehouseLocalization.Format(language, "stats.days", statsControl.Days.Value) : WarehouseLocalization.Text(language, "common.auto"));
 					string text6 = (statsControl.Page.HasValue ? WarehouseLocalization.Text(language, "stats.page_" + statsControl.Page.Value) : WarehouseLocalization.Text(language, "common.auto"));
 					text4 = "<color=#ffb347>" + WarehouseLocalization.Text(language, "stats.manual") + "\n<color=white>" + text5 + " · " + text6 + "\n" + WarehouseLocalization.Format(language, "stats.auto_in", num15);
@@ -4968,7 +4968,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		if (flag)
 		{
-			value2.ChangedAt = DateTime.UtcNow;
+			value2.ChangedAt = WarehouseClock.UtcNow;
 			_statsControls[group] = value2;
 			this.Logger.LogInfo((object)("Statistics board '" + group + "': manual period=" + (value2.Days?.ToString() ?? "AUTO") + ", page=" + (value2.Page?.ToString() ?? "AUTO") + " for 60 seconds."));
 		}
@@ -5084,7 +5084,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	{
 		int num = Math.Max(1, (search.Matches.Count + 12 - 1) / 12);
 		double num2 = ((num == 1) ? 10.0 : 8.0);
-		int num3 = Math.Min(num - 1, (int)((DateTime.UtcNow - search.StartedAt).TotalSeconds / num2) % num);
+		int num3 = Math.Min(num - 1, (int)((WarehouseClock.UtcNow - search.StartedAt).TotalSeconds / num2) % num);
 		List<RequestSuggestion> list = search.Matches.Skip(num3 * 12).Take(12).ToList();
 		WriteBoardCell(cells, 0, "<color=#80ffff>" + WarehouseLocalization.Text(language, "board.warehouse") + "\n" + id.ToUpperInvariant());
 		WriteBoardCell(cells, 1, "<color=#ffb347>" + WarehouseLocalization.Text(language, "request.suggestions") + "\n" + search.Query.ToUpperInvariant());
@@ -5872,7 +5872,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		value = new PerfWindow
 		{
-			Since = DateTime.UtcNow
+			Since = WarehouseClock.UtcNow
 		};
 		_performanceWindows[id] = value;
 		return value;
@@ -5907,24 +5907,24 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		perfWindow.RemoteQualityMinimum = Math.Min(perfWindow.RemoteQualityMinimum, _cycleRemoteQualityMinimum);
 		perfWindow.OutBytesPerSecond = Math.Max(perfWindow.OutBytesPerSecond, _cycleOutBytesPerSecond);
 		perfWindow.InBytesPerSecond = Math.Max(perfWindow.InBytesPerSecond, _cycleInBytesPerSecond);
-		if (elapsedMs >= 50 && (!_slowSampleAt.TryGetValue(id, out var value) || (DateTime.UtcNow - value).TotalSeconds >= 10.0))
+		if (elapsedMs >= 50 && (!_slowSampleAt.TryGetValue(id, out var value) || (WarehouseClock.UtcNow - value).TotalSeconds >= 10.0))
 		{
-			_slowSampleAt[id] = DateTime.UtcNow;
+			_slowSampleAt[id] = WarehouseClock.UtcNow;
 			AppendPerformance("SLOW", id, awake ? "awake" : "sleeping", 1, perfWindow.Skipped, elapsedMs, elapsedMs, _cycleTopologyMs, _cycleClassifyMs, _cycleDisplayMs, _cycleTransferMs, _cycleContainers, _cycleSigns, _cycleStores, _cycleInventoryReads, _cyclePeers, _cyclePingAverage, _cyclePingMaximum, _cycleLocalQualityMinimum, _cycleRemoteQualityMinimum, _cycleOutBytesPerSecond, _cycleInBytesPerSecond);
 		}
-		if (!((DateTime.UtcNow - perfWindow.Since).TotalSeconds < 30.0))
+		if (!((WarehouseClock.UtcNow - perfWindow.Since).TotalSeconds < 30.0))
 		{
 			AppendPerformance("SUMMARY", id, $"awake={perfWindow.AwakeCycles};sleeping={perfWindow.SleepingCycles}", perfWindow.Cycles, perfWindow.Skipped, (perfWindow.Cycles == 0) ? 0.0 : ((double)perfWindow.TotalMs / (double)perfWindow.Cycles), perfWindow.MaxMs, perfWindow.TopologyMs, perfWindow.ClassifyMs, perfWindow.DisplayMs, perfWindow.TransferMs, perfWindow.Containers, perfWindow.Signs, perfWindow.Stores, perfWindow.InventoryReads, perfWindow.Peers, perfWindow.PingAverage, perfWindow.PingMaximum, perfWindow.LocalQualityMinimum, perfWindow.RemoteQualityMinimum, perfWindow.OutBytesPerSecond, perfWindow.InBytesPerSecond);
 			_performanceWindows[id] = new PerfWindow
 			{
-				Since = DateTime.UtcNow
+				Since = WarehouseClock.UtcNow
 			};
 		}
 	}
 
 	private bool ShouldLogTransferDiagnostic(string id)
 	{
-		DateTime utcNow = DateTime.UtcNow;
+		DateTime utcNow = WarehouseClock.UtcNow;
 		if (_transferDiagnosticAt.TryGetValue(id, out var value) && (utcNow - value).TotalSeconds < 30.0)
 		{
 			return false;
@@ -5941,7 +5941,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		try
 		{
-			string text = string.Join(" | ", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture), kind, id, state, cycles.ToString(), skipped.ToString(), averageMs.ToString("0.0", CultureInfo.InvariantCulture), maximumMs.ToString(), topologyMs.ToString(), classifyMs.ToString(), displayMs.ToString(), transferMs.ToString(), containers.ToString(), signs.ToString(), stores.ToString(), inventoryReads.ToString(), peers.ToString(), pingAverage.ToString(), pingMaximum.ToString(), localQualityMinimum.ToString("0.000", CultureInfo.InvariantCulture), remoteQualityMinimum.ToString("0.000", CultureInfo.InvariantCulture), outBytesPerSecond.ToString("0", CultureInfo.InvariantCulture), inBytesPerSecond.ToString("0", CultureInfo.InvariantCulture));
+			string text = string.Join(" | ", WarehouseClock.UtcNow.ToString("O", CultureInfo.InvariantCulture), kind, id, state, cycles.ToString(), skipped.ToString(), averageMs.ToString("0.0", CultureInfo.InvariantCulture), maximumMs.ToString(), topologyMs.ToString(), classifyMs.ToString(), displayMs.ToString(), transferMs.ToString(), containers.ToString(), signs.ToString(), stores.ToString(), inventoryReads.ToString(), peers.ToString(), pingAverage.ToString(), pingMaximum.ToString(), localQualityMinimum.ToString("0.000", CultureInfo.InvariantCulture), remoteQualityMinimum.ToString("0.000", CultureInfo.InvariantCulture), outBytesPerSecond.ToString("0", CultureInfo.InvariantCulture), inBytesPerSecond.ToString("0", CultureInfo.InvariantCulture));
 			File.AppendAllText(_performanceLogPath, text + Environment.NewLine, Encoding.UTF8);
 		}
 		catch (Exception ex)

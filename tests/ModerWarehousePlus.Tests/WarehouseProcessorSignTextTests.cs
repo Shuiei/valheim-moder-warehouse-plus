@@ -5,7 +5,7 @@ namespace ModerWarehouse.Tests;
 /// <summary>
 /// How a sign's text is read: warehouse markers, labels, blank and ContainerSigns signs (WarehouseProcessor).
 /// </summary>
-[Collection("Item names")]
+[Collection("Game state")]
 public class WarehouseProcessorSignTextTests
 {
     [Theory]
@@ -131,6 +131,3 @@ public class WarehouseProcessorSignTextTests
         }
     }
 }
-
-[CollectionDefinition("Item names", DisableParallelization = true)]
-public sealed class ItemNamesCollection;

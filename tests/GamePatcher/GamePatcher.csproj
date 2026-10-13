@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs ServersideQoL's preloader patcher over the game's assembly_valheim.dll, as BepInEx does when
+       the game starts: the tests load the game's code as ServersideQoL sees it (its extra members on
+       ZDO and ZNetPeer). Run by the test project's build (ModerWarehousePlus.Tests.csproj). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <UsesGameDlls>false</UsesGameDlls>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- BepInEx's Cecil: the patcher is built against it. -->
+    <Reference Include="Mono.Cecil"><HintPath>$(BepInExCoreDir)/Mono.Cecil.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
