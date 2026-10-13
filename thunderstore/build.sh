@@ -2,8 +2,10 @@
 # Build the mod's package into <dist>: ModerWarehousePlus-<version>.zip with manifest.json, icon.png,
 # README.md, CHANGELOG.md, LICENSE and TRANSLATING.md at the root and the DLL in plugins/ (mod
 # managers flatten any other folder).
-# The version is the plugin's (Version in ModerWarehouse/WarehousePlugin.cs). The same zip goes to
-# GitHub, Thunderstore, Hexium and Nexus Mods (tools/publish.py).
+# Also ModerWarehousePlus-<version>-nexus.zip for Nexus Mods and manual installs, unzipped into the
+# game or server folder: BepInEx/plugins/ModerWarehousePlus/ with the DLL, LICENSE and TRANSLATING.md.
+# The version is the plugin's (Version in ModerWarehouse/WarehousePlugin.cs). tools/publish.py sends the
+# first zip to GitHub, Thunderstore and Hexium, the second to Nexus Mods (and GitHub).
 # Usage: thunderstore/build.sh <dist> [msbuild properties...]
 #   e.g. thunderstore/build.sh dist -p:ValheimDir=/opt/valheim -p:ServersideQoLDir=/tmp/sqol
 # (needs the .NET SDK, zip, and the DLLs at the paths in the .csproj or the ones given).
@@ -25,4 +27,11 @@ sed "s/@VERSION@/$version/g" "$here/manifest.json" > "$work/pkg/manifest.json"
 out="$dist/ModerWarehousePlus-$version.zip"
 rm -f "$out"
 (cd "$work/pkg" && zip -qrX "$out" .)
+echo "$out"
+nexus="$work/nexus/BepInEx/plugins/ModerWarehousePlus"
+mkdir -p "$nexus"
+cp "$work/build/ModerWarehousePlus.dll" "$repo/LICENSE" "$repo/docs/TRANSLATING.md" "$nexus/"
+out="$dist/ModerWarehousePlus-$version-nexus.zip"
+rm -f "$out"
+(cd "$work/nexus" && zip -qrX "$out" .)
 echo "$out"

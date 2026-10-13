@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Publish a release of the package zip (thunderstore/build.sh) everywhere it goes:
-a GitHub release on the version's tag, Thunderstore, Hexium and Nexus Mods.
+"""Publish a release of the package zips (thunderstore/build.sh) everywhere they go:
+a GitHub release on the version's tag (both zips), Thunderstore and Hexium (the Thunderstore zip)
+and Nexus Mods (<zip> with -nexus: unzipped into the game folder, as Nexus users install).
 
 Usage: tools/publish.py <zip> <version>     (needs Python 3.10+ and httpx)
 
@@ -66,6 +67,10 @@ def token(name: str) -> str:
 
 # ---- GitHub: a release on tag v<version>, with the zip attached.
 
+def nexus_zip(zip_path: Path) -> Path:
+    return zip_path.with_name(zip_path.stem + "-nexus.zip")
+
+
 def github(zip_path: Path, version: str, notes: str) -> str:
     auth = {"Authorization": f"Bearer {token('GITHUB_TOKEN')}", "Accept": "application/vnd.github+json", "User-Agent": USER_AGENT}
     tag = f"v{version}"
@@ -78,11 +83,14 @@ def github(zip_path: Path, version: str, notes: str) -> str:
         else:
             release = check(gh.post(f"/repos/{REPO}/releases", json={"tag_name": tag, "name": f"Moder Warehouse Plus {version}", "body": notes}),
                             "Creating the release").json()
-        if any(a["name"] == zip_path.name for a in release.get("assets", [])):
-            raise Skip(f"release {tag} already has {zip_path.name}")
+        attached = {a["name"] for a in release.get("assets", [])}
+        missing = [p for p in (zip_path, nexus_zip(zip_path)) if p.exists() and p.name not in attached]
+        if not missing:
+            raise Skip(f"release {tag} already has its zips")
         upload = release["upload_url"].split("{")[0]
-        check(gh.post(upload, params={"name": zip_path.name}, content=zip_path.read_bytes(),
-                      headers={"Content-Type": "application/zip"}, timeout=300), "Uploading the zip to the release")
+        for path in missing:
+            check(gh.post(upload, params={"name": path.name}, content=path.read_bytes(),
+                          headers={"Content-Type": "application/zip"}, timeout=300), f"Uploading {path.name} to the release")
         return release["html_url"]
 
 
@@ -143,6 +151,7 @@ def hexium(zip_path: Path, version: str, notes: str) -> str:
 def nexus(zip_path: Path, version: str, notes: str) -> str:
     key = token("NEXUS_API_KEY")
     mod_id = token("NEXUS_MOD_ID")
+    zip_path = nexus_zip(zip_path)
     headers = {"apikey": key, "User-Agent": USER_AGENT, "Application-Name": "ModerWarehousePlus-publish", "Application-Version": "1.0"}
     with httpx.Client(base_url="https://api.nexusmods.com/v3", headers=headers, timeout=60, follow_redirects=True) as nx:
         def v3(method: str, path: str, what: str, **kw):
@@ -173,7 +182,8 @@ def nexus(zip_path: Path, version: str, notes: str) -> str:
         else:
             raise RuntimeError("Nexus Mods was still processing the upload after 10 minutes.")
         body = {"upload_id": up["id"], "name": "Moder Warehouse Plus", "version": version, "file_category": "main",
-                "update_mod_version": True}
+                "update_mod_version": True,
+                "description": "The server plugin: unzip into the dedicated server's folder (BepInEx/plugins/ModerWarehousePlus/). Players need nothing."}
         if files:
             v3("POST", f"/mod-files/{files[0]['id']}/versions", "adding the version", json={**body, "archive_existing_file": True})
         else:
