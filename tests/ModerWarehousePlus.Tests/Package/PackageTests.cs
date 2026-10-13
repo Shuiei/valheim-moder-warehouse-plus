@@ -20,7 +20,7 @@ public class PackageTests
 
     [Fact]
     public void TheChangelogHasASectionForThePluginsVersion() =>
-        Assert.Matches(new Regex($"^## {Regex.Escape(WarehousePlugin.Version)}$", RegexOptions.Multiline), Package("CHANGELOG.md"));
+        Assert.Matches(new Regex($"^## {Regex.Escape(WarehousePlugin.Version)} — (unreleased|\\d{{4}}-\\d{{2}}-\\d{{2}})$", RegexOptions.Multiline), Package("CHANGELOG.md"));
 
     [Fact]
     public void TheManifestFollowsThunderstoresRules()

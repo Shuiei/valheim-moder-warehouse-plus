@@ -11,7 +11,8 @@
     <!-- ServersideQoL's preloader patcher, next to its plugins/ folder (the tests run it: GamePatcher). -->
     <PatchersDir Condition="'$(PatchersDir)' == ''">$(ServersideQoLDir)/../patchers</PatchersDir>
   </PropertyGroup>
-  <!-- Every project but the tools that need none of them (GamePatcher: UsesGameDlls false). -->
+  <!-- Every project but the tools that need none of them (UsesGameDlls false: tests/GamePatcher,
+       tools/release/publish.cs). -->
   <ItemGroup Condition="'$(UsesGameDlls)' != 'false'">
     <Reference Include="BepInEx"><HintPath>$(BepInExCoreDir)/BepInEx.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>
     <Reference Include="ServersideQoL"><HintPath>$(ServersideQoLDir)/ServersideQoL.dll</HintPath><Private>$(CopyGameDlls)</Private></Reference>

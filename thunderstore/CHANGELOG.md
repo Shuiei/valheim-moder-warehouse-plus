@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 1.0.0 — 2026-10-13
 
 First release of Moder Warehouse Plus, a fork of Moder Warehouse 2.0.0 by Cris Haani.
 
