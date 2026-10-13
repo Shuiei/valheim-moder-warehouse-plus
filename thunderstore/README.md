@@ -99,6 +99,32 @@ stock displays. `[WH:IGNORE]` explicitly excludes a chest. Private, open, in-use
 and unsuitable auto-destroy containers are not used. Items stay safely in the input
 chest when no destination has capacity.
 
+With Plus, a chest is also opted in by:
+
+- a ContainerSigns sign showing its contents list (it becomes the chest's label, see
+  [ContainerSigns](#containersigns));
+- a sign with only `•` or other punctuation, like `...`;
+- a label written as a contents line, such as `Wood 521`: it is read as `Wood` and
+  cleaned to that.
+
+Once initialised, a REQ sign takes:
+
+| Write on the REQ sign | What goes into OUT |
+|---|---|
+| `Wood 100` | 100 wood |
+| `Stone 10, Wood 20, Resin 5` | each of them |
+| `SOLL Wood 1000, Stone 500` | nothing: saves target stock, shown as a shopping list |
+| `craft Iron sword` (Plus) | the materials for one |
+| `craft Iron sword lvl 3` (Plus) | the materials to upgrade it to level 3 |
+| `craft Stone wall x10` (Plus) | the materials for ten (hammer, hoe and cultivator pieces too) |
+| `herstellen Eisenschwert stufe 2` (Plus) | the same in German |
+| `*mead* 2` (Plus) | 2 of every item whose name contains "mead" (up to 10 items) |
+| `craft *frost*` (Plus) | the materials for the one recipe matching, or a list of the candidates |
+
+`craft` counts what OUT already holds and only takes the rest. If an IN chest stays
+marked in use after its player left or walked away, Plus frees it after 30 seconds
+(90 seconds at most while they stand next to it; see `[Safety]` in the settings).
+
 ## Internal and cheat-object safety filter
 
 Moder Warehouse sorts only genuine player-handled items. Internal attack prefabs,
