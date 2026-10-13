@@ -16,7 +16,7 @@ public sealed class WarehousePlugin : ServersideQoLPluginBase<WarehousePlugin, W
 
 	public const string Name = "Moder Warehouse Plus";
 
-	public const string Version = "1.0.0";
+	public const string Version = "1.0.1";
 
 	// The original mod's id, which names its settings file.
 	private const string OriginalGuid = "ch.cris.valheim.moderwarehouse";

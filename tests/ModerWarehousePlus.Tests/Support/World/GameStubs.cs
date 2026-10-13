@@ -178,9 +178,9 @@ internal static class GameStubs
         return false;
     }
 
-    private static bool PlacePiece(Vector3 pos, int prefab, Quaternion rot, ref ServersideQoLZDO __result)
+    private static bool PlacePiece(Vector3 pos, int prefab, Quaternion rot, Processor.CreatorMarkers marker, ref ServersideQoLZDO __result)
     {
-        __result = World.Place(pos, prefab, rot);
+        __result = World.Place(pos, prefab, rot, marker);
         return false;
     }
 
@@ -213,7 +213,7 @@ internal static class GameStubs
     private static bool IsModCreator(ServersideQoLZDO __instance, ref Processor.CreatorMarkers marker, ref bool __result)
     {
         __result = World.IsPlacedByMod(__instance);
-        marker = __result ? Processor.CreatorMarkers.ProcessorOwned : Processor.CreatorMarkers.None;
+        marker = World.CreatorMarker(__instance);
         return false;
     }
 

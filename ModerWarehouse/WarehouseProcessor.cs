@@ -857,7 +857,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		string text = PlainText(vars.GetText(""));
 		if (CleanMarker.IsMatch(text))
 		{
-			List<ServersideQoLZDO> list = _signs.Where((ServersideQoLZDO other) => other != zdo && other.IsModCreator() && Distance2(other, zdo) < 0.0025f).ToList();
+			List<ServersideQoLZDO> list = _signs.Where((ServersideQoLZDO other) => other != zdo && PlacedByWarehouse(other) && Distance2(other, zdo) < 0.0025f).ToList();
 			foreach (ServersideQoLZDO item in list)
 			{
 				item.Destroy();
@@ -2381,7 +2381,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		bool result = false;
 		foreach (KeyValuePair<ServersideQoLZDO, ServersideQoLZDO> pair in blankSigns)
 		{
-			List<ServersideQoLZDO> list = StorageSigns.Where((ServersideQoLZDO sign) => sign != pair.Value && sign.IsModCreator() && sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false) && LinkedOrNearestContainer(sign, containers, range2) == pair.Key).ToList();
+			List<ServersideQoLZDO> list = StorageSigns.Where((ServersideQoLZDO sign) => sign != pair.Value && PlacedByWarehouse(sign) && sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false) && LinkedOrNearestContainer(sign, containers, range2) == pair.Key).ToList();
 			foreach (ServersideQoLZDO item in list)
 			{
 				_signs.Remove(item);
@@ -2530,7 +2530,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		//IL_00f5: Unknown result type (might be due to invalid IL or missing references)
 		//IL_00f8: Unknown result type (might be due to invalid IL or missing references)
 		//IL_00fd: Unknown result type (might be due to invalid IL or missing references)
-		foreach (ServersideQoLZDO item in StorageSigns.Where((ServersideQoLZDO x) => x.IsModCreator() && x.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false)).ToList())
+		foreach (ServersideQoLZDO item in StorageSigns.Where((ServersideQoLZDO x) => PlacedByWarehouse(x) && x.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false)).ToList())
 		{
 			ServersideQoLZDO val = LinkedOrNearestContainer(item, containers, range2);
 			if (val == null || (_localStorage != null && !_localStorage.Contains(val)))
@@ -3962,7 +3962,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			// Local patch 5: remove duplicate help signs left behind by earlier restarts (each one
 			// got its own group id, so match them by position next to this IN sign).
 			float helpRange2 = HelpSignRange * HelpSignRange;
-			foreach (ServersideQoLZDO item in _signs.Where((ServersideQoLZDO sign) => sign != val && sign.IsModCreator() && sign.ZDO.GetBool("ModerWarehouse.HelpChild", false) && Distance2(sign, inputSign) <= helpRange2).ToList())
+			foreach (ServersideQoLZDO item in _signs.Where((ServersideQoLZDO sign) => sign != val && PlacedByWarehouse(sign) && sign.ZDO.GetBool("ModerWarehouse.HelpChild", false) && Distance2(sign, inputSign) <= helpRange2).ToList())
 			{
 				_signs.Remove(item);
 				item.Destroy();
@@ -5691,6 +5691,17 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	}
 
 	private const string ContainerSignsGuid = "ArgusMagnus.ServersideQoL.ContainerSigns";
+
+	// The warehouse places its signs as ProcessorOwned; ServersideQoL ContainerSigns places its chest
+	// signs as None. Only the warehouse's own signs are removed or replaced: ContainerSigns keeps a
+	// list of its signs, and one removed by someone else makes removing its chest fail in
+	// ContainerSigns ("not found in PlacedObjects"), which stops the game's handling of every other
+	// object removed with it. A ContainerSigns sign used as a label is written on, never removed.
+	private static bool PlacedByWarehouse(ServersideQoLZDO sign)
+	{
+		CreatorMarkers marker;
+		return sign.IsModCreator(out marker) && marker == CreatorMarkers.ProcessorOwned;
+	}
 
 	// A sign's text names what its chest holds: not empty or punctuation only (a "..." or "•" sign
 	// waiting to be adopted), not a ContainerSigns contents list, not a warehouse marker.
