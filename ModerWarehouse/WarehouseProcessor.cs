@@ -680,10 +680,17 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
+	// The stock cache and performance log live in BepInEx/config/ModerWarehousePlus: mod managers
+	// replace a mod's plugin folder on updates, and the config folder is left alone.
+	private static string DataDirectory => Path.Combine(Paths.ConfigPath, "ModerWarehousePlus");
+
+	// Where the original Moder Warehouse keeps its stock cache (its plugin folder).
+	private static string OriginalStockCachePath => Path.Combine(Paths.PluginPath, "ModerWarehouse", "ModerWarehouse-stock-cache.tsv");
+
 	private void InitializePerformanceLog()
 	{
 		_performanceLogDisabled = false;
-		string text = Path.Combine(Paths.PluginPath, "ModerWarehouse");
+		string text = DataDirectory;
 		_performanceLogPath = Path.Combine(text, "ModerWarehouse-performance.log");
 		try
 		{
@@ -701,11 +708,18 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void InitializeStockCache()
 	{
-		string text = Path.Combine(Paths.PluginPath, "ModerWarehouse");
+		string text = DataDirectory;
 		_stockCachePath = Path.Combine(text, "ModerWarehouse-stock-cache.tsv");
 		try
 		{
 			Directory.CreateDirectory(text);
+			// First start after switching from the original mod: its cache is copied, and left
+			// where it is for going back.
+			if (!File.Exists(_stockCachePath) && File.Exists(OriginalStockCachePath))
+			{
+				File.Copy(OriginalStockCachePath, _stockCachePath);
+				this.Logger.LogInfo((object)("Stock cache copied from " + OriginalStockCachePath + "."));
+			}
 			if (!File.Exists(_stockCachePath))
 			{
 				return;

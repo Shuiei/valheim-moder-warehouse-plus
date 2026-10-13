@@ -13,5 +13,8 @@ First release of Moder Warehouse Plus, a fork of Moder Warehouse 2.0.0 by Cris H
 - REQ and INFO signs keep their warehouse when ContainerSigns recreates chest signs.
 - An abandoned IN chest's in-use lock is released (`[Safety]` settings).
 - Faster scans on large warehouses; each chest is saved once per cycle.
-- Settings from `ch.cris.valheim.moderwarehouse.cfg` are copied on the first start.
+- Settings from `ch.cris.valheim.moderwarehouse.cfg` and the stock cache from
+  `plugins/ModerWarehouse/` are copied on the first start. The stock cache and
+  performance log are now in `BepInEx/config/ModerWarehousePlus/`, which mod managers
+  leave alone on updates.
 - Needs ServersideQoL 2.3.0 or newer.
