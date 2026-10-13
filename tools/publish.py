@@ -9,7 +9,7 @@ Every site is optional: one whose token is not set is skipped with a note. A sit
 has this version is skipped too, so a release that failed half-way can simply be run again.
 All sites are tried even when one fails; the script fails at the end if any did.
 
-Environment (the CircleCI context mod-token, shared by the mods' projects):
+Run by hand, after main's pipeline passed (CI publishes nothing). Environment:
   GITHUB_TOKEN         a token that can create releases on this repository
   THUNDERSTORE_TOKEN   a service account token of the Thunderstore team
   HEXIUM_TOKEN         a team API token of the Hexium team

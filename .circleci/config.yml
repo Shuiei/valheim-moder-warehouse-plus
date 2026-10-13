@@ -1,25 +1,21 @@
-# Moder Warehouse Plus: tests, the package and a real server on every push; publishing on a version tag.
+# Moder Warehouse Plus: tests and build checks on every push and pull request. Nothing is published
+# from CI: releases are made by hand (README.md, Releasing), from the package main keeps.
 #   game-dlls     the game's DLLs (its Managed folder, 33 MB) the plugin and its tests build against,
 #                 from the free Valheim dedicated server (Steam app 896660, anonymous login)
 #   tests         the unit tests (tests/ModerWarehousePlus.Tests, every warning an error) on .NET 10:
 #                 the plugin's logic, and whole warehouse cycles in a stand-in world (Support/World:
 #                 the game's code, patched by ServersideQoL's patcher as in the game, with Harmony
 #                 standing in for Unity's engine and the live world). On main only, their code
-#                 coverage goes to Codecov (codecov.yml); branches run them without it
+#                 coverage goes to Codecov (codecov.yml, with the project's CODECOV_TOKEN); branches run
+#                 them without it
 #   package       the Thunderstore package (thunderstore/build.sh, every warning an error), against those
 #                 DLLs and BepInEx, ServersideQoL and YamlDotNet from Thunderstore (tools/ci-deps.sh, the
-#                 versions manifest.json depends on); kept as an artifact
+#                 versions manifest.json depends on); kept as an artifact on main only
 #   server-smoke  the package in a real dedicated server with BepInEx, ServersideQoL and ContainerSigns
 #                 (tools/server-smoke.sh): it loads, takes over the original mod's settings and stock
 #                 cache, starts with no error, and refuses to load beside the original
-#   publish       on a tag vX.Y.Z only, once all of the above passed: the tag must match the plugin's
-#                 version, then tools/publish.py sends the zip to a GitHub release, Thunderstore, Hexium
-#                 and Nexus Mods. Its tokens are in the context mod-token, shared by the mods' projects
-#                 (GITHUB_TOKEN, THUNDERSTORE_TOKEN, HEXIUM_TOKEN, NEXUS_API_KEY); NEXUS_MOD_ID and
-#                 CODECOV_TOKEN are this project's own environment variables. Publishing is permanent: a
-#                 version number goes to each site once (a re-run skips the sites that already have it).
 # What CI cannot cover: the warehouse at work (sorting, requests, boards), which needs players near it
-# in the world; check those on a test server before tagging.
+# in the world; check those on a test server before releasing.
 version: 2.1
 
 orbs:
@@ -149,8 +145,15 @@ jobs:
           command: |
             thunderstore/build.sh /tmp/dist -p:ManagedDir=/tmp/libs/managed \
               -p:BepInExCoreDir=/tmp/libs/mods/core -p:PluginsDir=/tmp/libs/mods/plugins
-      - store_artifacts:
-          path: /tmp/dist
+      # The packages kept as artifacts only for main (releases take them from there); other branches
+      # only test them.
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - store_artifacts:
+                path: /tmp/dist
+      # For server-smoke, in the same workflow.
       - persist_to_workspace:
           root: /tmp
           paths:
@@ -176,61 +179,18 @@ jobs:
       - store_artifacts:
           path: /tmp/valheim/smoke-logs
 
-  publish:
-    docker:
-      - image: cimg/python:3.12
-    resource_class: small
-    steps:
-      - checkout
-      - attach_workspace:
-          at: /tmp
-      - run:
-          name: The tag is the plugin's version
-          command: |
-            version=$(sed -n 's/.*const string Version = "\([0-9.]*\)".*/\1/p' ModerWarehouse/WarehousePlugin.cs)
-            [ "$CIRCLE_TAG" = "v$version" ] || { echo "Tag $CIRCLE_TAG does not match the plugin's version $version."; exit 1; }
-            echo "export VERSION=$version" >> "$BASH_ENV"
-      - run:
-          name: Publish to GitHub, Thunderstore, Hexium and Nexus Mods
-          command: |
-            pip install --quiet httpx==0.28.1
-            python tools/publish.py "/tmp/dist/ModerWarehousePlus-$VERSION.zip" "$VERSION"
-
 workflows:
-  # Every push: game-dlls, then tests and the package side by side, then the smoke test on the package.
-  # A tag vX.Y.Z runs the same and, once all passed, publishes.
-  release:
+  # Side by side once the game's DLLs are there: the tests and the package; the smoke test waits for
+  # the package.
+  test:
     jobs:
-      - game-dlls:
-          filters:
-            tags:
-              only: /^v\d+\.\d+\.\d+$/
+      - game-dlls
       - tests:
           requires:
             - game-dlls
-          filters:
-            tags:
-              only: /^v\d+\.\d+\.\d+$/
       - package:
           requires:
             - game-dlls
-          filters:
-            tags:
-              only: /^v\d+\.\d+\.\d+$/
       - server-smoke:
           requires:
             - package
-          filters:
-            tags:
-              only: /^v\d+\.\d+\.\d+$/
-      - publish:
-          context: mod-token
-          requires:
-            - tests
-            - package
-            - server-smoke
-          filters:
-            branches:
-              ignore: /.*/
-            tags:
-              only: /^v\d+\.\d+\.\d+$/
