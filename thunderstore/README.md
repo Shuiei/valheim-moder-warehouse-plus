@@ -22,8 +22,9 @@ few fixes. It replaces Moder Warehouse: install one or the other, not both.
   at a server start.
 - **A stuck IN chest is freed.** When the player who opened the IN chest has left or
   disconnected, its in-use lock is released (settings in `[Safety]`).
-- **Faster on big warehouses:** IN/OUT markers are found from signs only, world scans
-  are quicker, and each chest is saved once per cycle instead of once per move.
+- **Faster on big warehouses and worlds:** IN/OUT markers are found from signs only,
+  world-wide reads keep a list of the world's chests and signs instead of going through
+  every object, and each chest is saved once per cycle instead of once per move.
 
 ## Requirements
 
