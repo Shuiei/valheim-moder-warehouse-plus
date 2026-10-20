@@ -647,6 +647,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_inventoryIndex.Clear();
 		InitializePerformanceLog();
 		InitializeStockCache();
+		EnsureWorldIndex();
 		ContainerRegistryProcessor val = Processor.Instance<ContainerRegistryProcessor>();
 		_containers = val.GetContainers(100f);
 		val.ContainerChanged -= OnContainerChanged;
@@ -2025,34 +2026,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		//IL_037d: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
-			if (!(typeof(ZDOMan).GetField("m_objectsByID", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(ZDOMan.instance) is IDictionary dictionary))
+			List<ZDO> list = new List<ZDO>();
+			List<PersistedSign> list2 = new List<PersistedSign>();
+			if (!ReadWorldChestsAndSigns(list, list2))
 			{
 				return;
-			}
-			List<ZDO> list = new List<ZDO>(dictionary.Count);
-			List<PersistedSign> list2 = new List<PersistedSign>();
-			foreach (DictionaryEntry item in dictionary)
-			{
-				object value = item.Value;
-				ZDO val = (ZDO)((value is ZDO) ? value : null);
-				// Local patch 7: classify by cached prefab first. Only chests feed the spatial index and
-				// only signs have their text read, instead of every object in the world.
-				if (val == null)
-				{
-					continue;
-				}
-				if (IsContainerPrefab(val.GetPrefab()))
-				{
-					list.Add(val);
-				}
-				else if (IsSignObject(val))
-				{
-					string value2 = val.GetString(ZDOVars.s_text, string.Empty);
-					if (!string.IsNullOrWhiteSpace(value2))
-					{
-						list2.Add(new PersistedSign(val, PlainText(value2)));
-					}
-				}
 			}
 			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(list);
 			List<PersistedInputCandidate> list3 = new List<PersistedInputCandidate>();
@@ -3207,34 +3185,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		long num3 = 0L;
 		try
 		{
-			if (!(typeof(ZDOMan).GetField("m_objectsByID", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(ZDOMan.instance) is IDictionary dictionary))
+			List<ZDO> list = new List<ZDO>();
+			List<PersistedSign> list2 = new List<PersistedSign>();
+			if (!ReadWorldChestsAndSigns(list, list2))
 			{
 				return false;
-			}
-			List<ZDO> list = new List<ZDO>(dictionary.Count);
-			List<PersistedSign> list2 = new List<PersistedSign>();
-			foreach (DictionaryEntry item in dictionary)
-			{
-				object value = item.Value;
-				ZDO val = (ZDO)((value is ZDO) ? value : null);
-				// Local patch 7: classify by cached prefab first. Only chests feed the spatial index and
-				// only signs have their text read, instead of every object in the world.
-				if (val == null)
-				{
-					continue;
-				}
-				if (IsContainerPrefab(val.GetPrefab()))
-				{
-					list.Add(val);
-				}
-				else if (IsSignObject(val))
-				{
-					string value2 = val.GetString(ZDOVars.s_text, string.Empty);
-					if (!string.IsNullOrWhiteSpace(value2))
-					{
-						list2.Add(new PersistedSign(val, PlainText(value2)));
-					}
-				}
 			}
 			num = stopwatch.ElapsedMilliseconds;
 			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(list);
@@ -5656,6 +5611,106 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 		}
 		return stringBuilder.ToString();
+	}
+
+	private static readonly FieldInfo ObjectsByIdField = typeof(ZDOMan).GetField("m_objectsByID", BindingFlags.Instance | BindingFlags.NonPublic);
+
+	private static WorldObjectIndex _worldIndex;
+
+	private static ZDOMan _worldIndexOwner;
+
+	private static Dictionary<ZDOID, ZDO> _worldObjects;
+
+	private static bool _creationPatchTried;
+
+	private static bool _followsCreations;
+
+	private readonly List<ZDO> _worldSigns = new List<ZDO>();
+
+	private void EnsureWorldIndex()
+	{
+		ZDOMan zdoMan = ZDOMan.instance;
+		if (zdoMan == null || (_worldIndex != null && _worldIndexOwner == zdoMan))
+		{
+			return;
+		}
+		if (_worldIndexOwner != null)
+		{
+			_worldIndexOwner.m_onZDODestroyed -= OnWorldObjectDestroyed;
+		}
+		_worldObjects = ObjectsByIdField?.GetValue(zdoMan) as Dictionary<ZDOID, ZDO>;
+		if (_worldObjects == null)
+		{
+			this.Logger.LogError((object)"ZDOMan.m_objectsByID not found: world-wide warehouse reads (topology, stock of other warehouses) are off.");
+		}
+		_worldIndex = new WorldObjectIndex(() => _worldObjects?.Values ?? (IEnumerable<ZDO>)Array.Empty<ZDO>(), IsLiveWorldObject, (ZDO zdo) => IsContainerPrefab(zdo.GetPrefab()), IsSignObject);
+		_worldIndexOwner = zdoMan;
+		zdoMan.m_onZDODestroyed += OnWorldObjectDestroyed;
+		PatchWorldObjectCreation();
+		_worldIndex.FollowsCreations = _followsCreations;
+	}
+
+	private void PatchWorldObjectCreation()
+	{
+		if (_creationPatchTried)
+		{
+			return;
+		}
+		_creationPatchTried = true;
+		try
+		{
+			MethodInfo create = typeof(ZDOMan).GetMethod("CreateNewZDO", BindingFlags.Instance | BindingFlags.NonPublic, null, new Type[3]
+			{
+				typeof(ZDOID),
+				typeof(Vector3),
+				typeof(int)
+			}, null);
+			if (create == null)
+			{
+				this.Logger.LogError((object)"ZDOMan.CreateNewZDO(ZDOID, Vector3, int) not found: world-wide warehouse reads walk every object in the world.");
+				return;
+			}
+			new HarmonyLib.Harmony(WarehousePlugin.Guid).Patch(create, postfix: new HarmonyLib.HarmonyMethod(typeof(WarehouseProcessor), nameof(OnWorldObjectCreated)));
+			_followsCreations = true;
+		}
+		catch (Exception ex)
+		{
+			this.Logger.LogError((object)("Following created objects failed: world-wide warehouse reads walk every object in the world. " + ex));
+		}
+	}
+
+	internal static void OnWorldObjectCreated(ZDO __result)
+	{
+		_worldIndex?.Created(__result);
+	}
+
+	private static void OnWorldObjectDestroyed(ZDO zdo)
+	{
+		_worldIndex?.Destroyed(zdo);
+	}
+
+	private static bool IsLiveWorldObject(ZDO zdo)
+	{
+		return _worldObjects != null && _worldObjects.TryGetValue(zdo.m_uid, out var value) && value == zdo;
+	}
+
+	private bool ReadWorldChestsAndSigns(List<ZDO> chests, List<PersistedSign> signs)
+	{
+		EnsureWorldIndex();
+		if (_worldObjects == null)
+		{
+			return false;
+		}
+		_worldIndex.Read(chests, _worldSigns);
+		foreach (ZDO worldSign in _worldSigns)
+		{
+			string text = worldSign.GetString(ZDOVars.s_text, string.Empty);
+			if (!string.IsNullOrWhiteSpace(text))
+			{
+				signs.Add(new PersistedSign(worldSign, PlainText(text)));
+			}
+		}
+		return true;
 	}
 
 	private static bool IsSignObject(ZDO zdo)

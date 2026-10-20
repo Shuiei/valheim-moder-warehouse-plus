@@ -366,6 +366,8 @@ public sealed class TestWorld : IDisposable
         zdo.Init();
         zdo.SetPrefab(prefab);
         ObjectsById[zdo.m_uid] = zdo;
+        // As the game's ZDOMan.CreateNewZDO, which the warehouse follows.
+        WarehouseProcessor.OnWorldObjectCreated(zdo);
         // Made with the ZDO, as in the game (ServersideQoL's preloader patcher: GamePatcher).
         var wrapped = (ServersideQoLZDO)AccessTools.PropertyGetter(typeof(ZDO), "ServersideQoLZDO").Invoke(zdo, [])!;
         _objects.Add(wrapped);

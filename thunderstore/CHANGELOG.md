@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 — unreleased
+
+- No more short freezes on big worlds: checking the warehouses (every 5 minutes) and
+  counting other warehouses' stock for a request no longer go through every object in
+  the world, which could hold the whole server for a quarter of a second.
+
 ## 1.0.1 — 2026-10-13
 
 - With ServersideQoL ContainerSigns: the warehouse no longer removes or moves the
