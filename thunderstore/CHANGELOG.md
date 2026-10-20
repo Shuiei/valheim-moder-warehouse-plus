@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.2 — unreleased
+## 1.0.2 — 2026-10-20
 
 - No more short freezes on big worlds: checking the warehouses (every 5 minutes) and
   counting other warehouses' stock for a request no longer go through every object in
