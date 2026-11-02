@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 — unreleased
+## 1.1.0 — 2026-11-02
 
 Brings in Moder Warehouse 2.0.1 to 2.0.3 by Cris Haani. Existing warehouses, labels,
 boards and statistics carry over; nothing needs to be rebuilt.
