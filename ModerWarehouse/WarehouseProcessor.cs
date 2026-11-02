@@ -3414,7 +3414,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				dictionary[name] = (dictionary.TryGetValue(name, out var value3) ? (Math.Min(value3.Item1, num), value3.Item2 + item.m_stack) : (num, item.m_stack));
 			}
 		}
-		return RequestPolicy.ChooseToken(dictionary.Select<KeyValuePair<string, (int, int)>, (string, int, int)>((KeyValuePair<string, (int Rank, int Amount)> pair) => (Key: pair.Key, Rank: pair.Value.Rank, Amount: pair.Value.Amount)));
+		return RequestPolicy.ChooseToken(dictionary.Select<KeyValuePair<string, (int, int)>, (string, int, int)>((KeyValuePair<string, (int Rank, int Amount)> pair) => (pair.Key, pair.Value.Rank, pair.Value.Amount)));
 	}
 
 	private List<string> FindRemoteStock(string localId, string language, string query)

@@ -52,7 +52,7 @@ internal sealed class SpatialLookup<T> where T : class
 
 	private static long Pack(int x, int y, int z)
 	{
-		return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (z & 0x1FFFFF);
+		return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (long)(z & 0x1FFFFF);
 	}
 
 	internal T Nearest(float x, float y, float z, float radiusSquared, Func<T, bool> include = null, bool preferLastOnTie = false)
