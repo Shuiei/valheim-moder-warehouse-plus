@@ -5,7 +5,7 @@ fills withdrawal requests, tracks target stock and shows it all on signs. Player
 with an unchanged game.
 
 **Moder Warehouse Plus is a fork of [Moder Warehouse](https://thunderstore.io/c/valheim/p/CrisHaani/ModerWarehouse/)
-2.0.0 by Cris Haani**, released under the MIT license. Everything Moder Warehouse does
+2.0.3 by Cris Haani**, released under the MIT license. Everything Moder Warehouse does
 is here; Plus adds crafting requests, wildcard requests, ContainerSigns support and a
 few fixes. It replaces Moder Warehouse: install one or the other, not both.
 
@@ -185,17 +185,14 @@ To enroll a destination, attach either a normal item label or a blank vanilla si
 whose complete text is `...`. An unsigned chest remains private to the player and is
 invisible to the warehouse. Once an enrolled chest contains only one item type, Moder
 Warehouse recognises it as a destination for matching items. If `AutoCreateLabels` is
-enabled, it gets a persistent white label after `AutoLabelDelay` (90 seconds by
-default); an existing `...` sign is reused.
+enabled, its `...` sign is turned into a persistent white item label.
 
 For exact sign placement, attach and orient an ordinary vanilla sign yourself and set
 its complete text to `...`. Moder Warehouse reuses that sign instead of creating one.
 Ordinary storage labels and `...` adoption signs must be within `LabelDistance` of the
 chest (one metre by default). The separate three-metre `MarkerDistance` applies to
 functional signs such as IN, OUT and REQ and is deliberately not used for dense racks.
-Automatically created labels are placed on the decorated oval front of vanilla chests;
-older server-generated back-side labels are migrated automatically. Player-built signs
-are never moved.
+Player-built signs are never moved.
 The first automatic assignment records the underlying Valheim item token. From then on,
 the label follows `LANG=`/`Language`, even while the chest is empty. Do not use `...` on
 a sign that should remain manually controlled.
@@ -204,6 +201,36 @@ Existing non-empty manual labels still reserve and route their nearest chest, bu
 text is never translated. Older automatic signs are migrated only when the mod can
 identify them safely; if an old label does not switch language, clear its text to `...`
 once and let Moder Warehouse adopt it.
+
+## Category, catch-all and refill chests
+
+**Category labels** reserve a chest for a whole group instead of one item:
+`ORE`, `BARS`, `FOOD`, `MEADS`, `AMMO`, `TROPHIES`, `WEAPONS`, `ARMOR`, `TOOLS`, `FISH`
+(German: `ERZ`, `BARREN`, `ESSEN`, `MET`, `MUNITION`, `TROPHÄEN`, `WAFFEN`, `RÜSTUNG`,
+`WERKZEUG`, `FISCH`). Groups come from the game's own item data (item type and food
+values), so new game items join automatically. A chest with its own item label is
+filled first; category chests come before brand-new single-item chests.
+
+**Catch-all chest:** a chest labeled `MISC` (German `SONSTIGES`) receives only what
+fits nowhere else, so IN never stays blocked. The janitor moves items out again as
+soon as a proper chest exists (checked at most every 30 seconds).
+
+**No room:** if an item still finds no place, the stock board shows `NO ROOM` with the
+item and amount, the chest counter turns red and the server log names the items.
+
+**Refill chests:** `[WH:<id>:FILL] Coal 50, Wood 20` on a sign at most three metres from
+any chest inside the warehouse radius keeps that chest topped up from storage, for
+example next to a smelter or the kitchen. Nothing is taken back out of it, and it never
+counts as storage.
+
+**Numbered labels:** automatic labels such as `WOOD1` and `WOOD2` belong to one
+warehouse; lower numbers are filled first and higher numbers emptied first.
+
+**Compaction:** once a minute, while IN is empty, one item type spread over several of
+its own chests is consolidated if a whole chest's content fits into the others. The
+highest-numbered chest is emptied first; an unnumbered automatic label then returns to
+`...`, freeing the chest for new items. Changing an empty chest's sign to `...` also
+releases it.
 
 ## Requests
 
@@ -285,18 +312,24 @@ Place one vanilla sign as the **bottom-left** anchor and write:
 ```
 
 The server creates fifteen signs to the right and above. Four local pages rotate automatically:
-today, a direct 7/30/90-day comparison, trends/forecast, and dated records. Metrics
+today, a direct 7/30/365-day comparison, trends/forecast, and dated records. Metrics
 include deposits, withdrawals, balance, daily average, top items, current total,
 item types, current and average chest usage, peak/low stock, strongest trends, the item
 expected to run out first, and the input/output ratio.
 
 Movement history is stored as compact daily aggregates on the anchor sign. Windows
-roll every day instead of resetting at the start of a month. Data older than 90 days is
-automatically removed, so storage cannot grow forever. Player identities are not
+roll every day instead of resetting at the start of a month. Daily totals are kept for
+365 days and per-item details for 90 days, so storage stays bounded. `TRACKED SINCE`
+shows the day the board started recording, including the year, and never slides. Player identities are not
 recorded. Forecasts are simple flow projections, not guarantees. The statistics board
 uses the same wake distance and sleep behaviour as the stock board.
 
-Two cells are interactive: edit `PERIOD` to any whole number from `1` to `90`, and
+The trends page also forecasts capacity: chests occupied per week and the days until
+every chest is in use (after one week of history). On every world save the server writes
+`BepInEx/config/ModerWarehousePlus/ModerWarehouse-statistics-<ID>.csv` (semicolon
+separated, one line per day) for review outside the game.
+
+Two cells are interactive: edit `PERIOD` to any whole number from `1` to `365`, and
 edit `PAGE` to `1`, `2`, `3` or `4`. The server restores its rendered text after
 reading the command. A separate control sign is created below the board and accepts
 combined commands such as `27 TREND`, `30 3`, `TODAY OVERVIEW` or `AUTO`. German
@@ -359,18 +392,16 @@ independent site, for example `[WH:harbour:IN]` and `[WH:harbour:OUT]`.
 | `ScanInterval` | `3` | seconds between scans |
 | `MaxMovesPerCycle` | `250` | safety limit for stack movements |
 | `AutoCreateLabels` | `true` | create automatic chest labels |
-| `AutoLabelDelay` | `90` | seconds before automatic labeling |
 | `ResultDisplaySeconds` | `8` | maximum request-result display time |
 | `BoardPageSeconds` | `3` | stock-board page duration |
 | `BoardWakeDistance` | `5` | stock-board wake distance |
 | `DeliveryNoticeSeconds` | `6` | delivery-message duration |
 | `VisitSummarySeconds` | `12` | visit-difference duration |
 | `CapacityWarningPercent` | `80` | orange capacity threshold |
+| `CapacityCriticalPercent` | `95` | red capacity threshold |
 | `StaleInputLockSeconds` | `30` | seconds before an abandoned IN chest's in-use lock is released (`0` disables) |
 | `StaleInputLockPlayerDistance` | `4` | the opener keeps the lock while this close (m) |
 | `StaleInputLockMaxSeconds` | `90` | the lock is released after this long regardless |
-
-| `CapacityCriticalPercent` | `95` | red capacity threshold |
 
 Test configuration changes on a world copy. Very short scan intervals and very large
 
@@ -379,6 +410,10 @@ Test configuration changes on a world copy. Very short scan intervals and very l
 - **Plugin does not load:** verify BepInEx and ServersideQoL 2.3+, remove `ModerWarehouse.dll`
   and duplicate DLLs,
   and check the log for `Loading [Moder Warehouse Plus …]`.
+- **A board shows `INACTIVE`:** the second line names the reason (for example no input
+  chest, a locked warehouse or an unavailable input chest); the log names it once.
+- **A request shows that OUT is missing:** place an `[WH:<id>:OUT]` sign at the output
+  chest of that warehouse.
 - **IN or OUT is not detected:** verify exact spelling, matching warehouse id and a
   sign-to-chest distance below three metres.
 - **Items remain in IN:** check capacity, matching stacks, private/open containers and

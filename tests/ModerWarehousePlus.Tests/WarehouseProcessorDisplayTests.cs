@@ -23,7 +23,11 @@ public class WarehouseProcessorDisplayTests
     public void SignedAmountsKeepTheirSign(int amount, string text) => Assert.Equal(text, WarehouseProcessor.FormatSignedAmount(amount));
 
     [Fact]
-    public void ADayIsShownAsDayAndMonth() => Assert.Equal("03.10.", WarehouseProcessor.DayLabel(20261003));
+    public void ADayIsShownWithItsYear()
+    {
+        Assert.Equal("03.10.26", WarehouseProcessor.DayLabel(20261003));
+        Assert.Equal("03.10.2026", WarehouseProcessor.DayLabel(20261003, fullYear: true));
+    }
 
     [Theory]
     [InlineData("wood", "W")]

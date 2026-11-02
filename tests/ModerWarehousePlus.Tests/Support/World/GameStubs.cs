@@ -85,6 +85,8 @@ internal static class GameStubs
             Replace(AccessTools.Method(warehouse, "IsSignObject"), nameof(IsSignObject));
             Replace(AccessTools.Method(warehouse, "WorldObjectsNear"), nameof(WorldObjectsNear));
             Replace(AccessTools.Method(warehouse, "CapturePeerMetrics"), nameof(Skip));
+            // Unity's frame count (the inventory warm-up's per-frame budget): every call is a new frame.
+            Replace(AccessTools.Method(warehouse, "FrameCount"), nameof(FrameCount));
             Replace(AccessTools.Method(warehouse, "LoadGermanNames"), nameof(Skip));
             // Unity objects' names (kept by the engine): the test world names its recipes, items and pieces.
             Replace(AccessTools.PropertyGetter(typeof(UnityEngine.Object), "name"), nameof(ObjectName));
@@ -99,6 +101,14 @@ internal static class GameStubs
     private static TestWorld World => TestWorld.Current ?? throw new InvalidOperationException("No TestWorld is open.");
 
     private static bool Skip() => false;
+
+    private static int _frame;
+
+    private static bool FrameCount(ref int __result)
+    {
+        __result = System.Threading.Interlocked.Increment(ref _frame);
+        return false;
+    }
 
     private static bool True(ref bool __result)
     {

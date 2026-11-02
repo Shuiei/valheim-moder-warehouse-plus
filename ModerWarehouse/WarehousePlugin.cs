@@ -6,7 +6,7 @@ using ServersideQoL;
 
 namespace ModerWarehouse;
 
-// A fork of Moder Warehouse 2.0.0 by Cris Haani (MIT). It replaces the original, which must not be
+// A fork of Moder Warehouse 2.0.3 by Cris Haani (MIT). It replaces the original, which must not be
 // loaded beside it: both would drive the same warehouse signs and chests.
 [BepInPlugin(Guid, Name, Version)]
 [BepInIncompatibility(OriginalGuid)]
@@ -16,7 +16,10 @@ public sealed class WarehousePlugin : ServersideQoLPluginBase<WarehousePlugin, W
 
 	public const string Name = "Moder Warehouse Plus";
 
-	public const string Version = "1.0.2";
+	public const string Version = "1.1.0";
+
+	// Shown in the startup and performance log lines, to tell builds apart.
+	public const string BuildId = "plus-" + Version;
 
 	// The original mod's id, which names its settings file.
 	private const string OriginalGuid = "ch.cris.valheim.moderwarehouse";

@@ -100,6 +100,19 @@ internal static class WarehouseLocalization
 		}
 	}
 
+	public static IEnumerable<string> TargetKeywords()
+	{
+		HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SOLL", "TARGET" };
+		foreach (Dictionary<string, string> value2 in Languages.Values)
+		{
+			if (value2.TryGetValue("request.target", out var value) && !string.IsNullOrWhiteSpace(value))
+			{
+				hashSet.Add(value.Trim());
+			}
+		}
+		return hashSet;
+	}
+
 	public static bool StartsWithAnyTranslation(string text, params string[] keys)
 	{
 		string text2 = (text ?? string.Empty).TrimStart(Array.Empty<char>());
@@ -304,6 +317,7 @@ internal static class WarehouseLocalization
 			["request.done"] = "DONE {0} x{1}",
 			["request.partial"] = "PARTIAL {0} x{1}/{2}",
 			["request.output_full"] = "OUTPUT FULL {0}",
+			["request.no_output"] = "NO OUT CHEST: ADD AN OUT SIGN",
 			["request.not_found"] = "NOT FOUND {0}",
 			["request.wildcard_too_many"] = "TOO MANY MATCHES {0}: {1} (MAX {2})",
 			["request.craft_header"] = "CRAFTING {0} x{1}:",
@@ -325,6 +339,11 @@ internal static class WarehouseLocalization
 			["board.page"] = "PAGE",
 			["board.chests"] = "CHESTS",
 			["board.display_sleeping"] = "DISPLAY\nSLEEPING",
+			["board.inactive"] = "INACTIVE",
+			["board.no_space"] = "NO ROOM",
+			["board.no_input"] = "IN SIGN\nMISSING",
+			["board.locked"] = "WAREHOUSE\nLOCKED",
+			["board.input_unavailable"] = "IN CHEST\nUNAVAILABLE",
 			["board.wake"] = "{0} METRES\nWAKE UP",
 			["board.sleep_word"] = "SLEEPMODE",
 			["board.expand"] = "EXPAND!",
@@ -370,6 +389,9 @@ internal static class WarehouseLocalization
 			["stats.busy_in"] = "BUSIEST INPUT",
 			["stats.busy_out"] = "BUSIEST OUTPUT",
 			["stats.tracked_since"] = "TRACKED SINCE",
+			["stats.full_in"] = "FULL IN",
+			["stats.chest_trend"] = "CHESTS USED",
+			["stats.week"] = "WEEK",
 			["stats.days_tracked"] = "DAYS TRACKED",
 			["stats.days_short"] = "DAYS",
 			["stats.eta"] = "DAYS LEFT",
@@ -408,6 +430,7 @@ internal static class WarehouseLocalization
 			["request.done"] = "FERTIG {0} x{1}",
 			["request.partial"] = "TEILWEISE {0} x{1}/{2}",
 			["request.output_full"] = "AUSGABE VOLL {0}",
+			["request.no_output"] = "KEINE OUT-KISTE: OUT-SCHILD SETZEN",
 			["request.not_found"] = "NICHT GEFUNDEN {0}",
 			["request.wildcard_too_many"] = "ZU VIELE TREFFER {0}: {1} (MAX. {2})",
 			["request.craft_header"] = "HERSTELLUNG {0} x{1}:",
@@ -429,6 +452,11 @@ internal static class WarehouseLocalization
 			["board.page"] = "SEITE",
 			["board.chests"] = "KISTEN",
 			["board.display_sleeping"] = "ANZEIGE\nSCHLÄFT",
+			["board.inactive"] = "INAKTIV",
+			["board.no_space"] = "KEIN PLATZ",
+			["board.no_input"] = "IN-SCHILD\nFEHLT",
+			["board.locked"] = "LAGER\nGESPERRT",
+			["board.input_unavailable"] = "IN-KISTE NICHT\nVERFÜGBAR",
 			["board.wake"] = "{0} METER\nAUFWECKEN",
 			["board.sleep_word"] = "RUHEMODUS",
 			["board.expand"] = "AUSBAUEN!",
@@ -474,6 +502,9 @@ internal static class WarehouseLocalization
 			["stats.busy_in"] = "MAX EINGANG",
 			["stats.busy_out"] = "MAX AUSGANG",
 			["stats.tracked_since"] = "ERFASST SEIT",
+			["stats.full_in"] = "VOLL IN",
+			["stats.chest_trend"] = "KISTEN BELEGT",
+			["stats.week"] = "WOCHE",
 			["stats.days_tracked"] = "TAGE ERFASST",
 			["stats.days_short"] = "TAGE",
 			["stats.eta"] = "NOCH TAGE",
