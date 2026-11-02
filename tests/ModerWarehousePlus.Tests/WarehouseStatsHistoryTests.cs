@@ -59,16 +59,31 @@ public class WarehouseStatsHistoryTests
     }
 
     [Fact]
-    public void DaysOlderThanNinetyDaysAreDropped()
+    public void DailyTotalsAreKeptForAYearAndItemDetailsForNinetyDays()
     {
         string saved = string.Join("\n",
-            $"{Key(0)}|1|0|0|0|0||",
-            $"{Key(89)}|2|0|0|0|0||",
-            $"{Key(90)}|3|0|0|0|0||");
+            $"{Key(0)}|1|0|0|0|0|%24item_wood=1|",
+            $"{Key(89)}|2|0|0|0|0|%24item_wood=2|",
+            $"{Key(90)}|3|0|0|0|0|%24item_wood=3|",
+            $"{Key(364)}|4|0|0|0|0||",
+            $"{Key(365)}|5|0|0|0|0||");
         var history = WarehouseStatsHistory.Parse(saved);
-        Assert.Equal([Key(89), Key(0)], history.Window(90).Select(d => d.Key));
-        Assert.Equal(Key(89), history.FirstDayKey);
-        Assert.Equal(90, history.TrackedDays);
+        Assert.Equal([Key(364), Key(90), Key(89), Key(0)], history.Window(365).Select(d => d.Key));
+        Assert.Equal(3, history.Window(365).Single(d => d.Key == Key(90)).Input);
+        Assert.Empty(history.Window(365).Single(d => d.Key == Key(90)).Inputs);
+        Assert.Equal(2, history.Window(365).Single(d => d.Key == Key(89)).Inputs["$item_wood"]);
+        // The first day ever recorded stays the start, even once its own totals are gone.
+        Assert.Equal(Key(365), history.StartDayKey);
+        Assert.Equal(366, history.TrackedDays);
+    }
+
+    [Fact]
+    public void TheStartDaySurvivesBeingSaved()
+    {
+        var history = WarehouseStatsHistory.Parse($"{Key(400)}|1|0|0|0|0||\n{Key(3)}|1|0|0|0|0||");
+        var reloaded = WarehouseStatsHistory.Parse(history.Serialize());
+        Assert.Equal(Key(400), reloaded.StartDayKey);
+        Assert.Equal([Key(3)], reloaded.Window(365).Select(d => d.Key));
     }
 
     [Fact]
@@ -97,6 +112,6 @@ public class WarehouseStatsHistoryTests
     {
         var history = WarehouseStatsHistory.Parse(null);
         Assert.Equal(0, history.TrackedDays);
-        Assert.Equal(Key(0), history.FirstDayKey);
+        Assert.Equal(Key(0), history.StartDayKey);
     }
 }

@@ -4,7 +4,7 @@ Server-only BepInEx plugin for Valheim: an automatic warehouse driven by signs. 
 chest into labelled storage, fills REQ requests (including `craft <item>` and `*` wildcards),
 tracks target stock and draws stock and statistics boards. Players need no mod.
 
-A fork of [Moder Warehouse](https://thunderstore.io/c/valheim/p/CrisHaani/ModerWarehouse/) 2.0.0
+A fork of [Moder Warehouse](https://thunderstore.io/c/valheim/p/CrisHaani/ModerWarehouse/) 2.0.3
 by Cris Haani (MIT). What it adds, and how to use it: [the mod page](thunderstore/README.md).
 Install with a mod manager: [Tie-ModerWarehousePlus on Thunderstore](https://thunderstore.io/c/valheim/p/Tie/ModerWarehousePlus/).
 

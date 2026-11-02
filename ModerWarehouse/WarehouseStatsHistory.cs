@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using ServersideQoL;
+using System.Text;
 
 namespace ModerWarehouse;
 
@@ -27,7 +27,17 @@ internal sealed class WarehouseStatsHistory
 		public readonly Dictionary<string, int> Outputs = new Dictionary<string, int>();
 	}
 
+	internal const int TotalsDays = 365;
+
+	internal const int DetailDays = 90;
+
+	private const string StartPrefix = "S|";
+
+	private static DateTime UtcNow() => WarehouseClock.UtcNow;
+
 	private readonly SortedDictionary<int, Day> _days = new SortedDictionary<int, Day>();
+
+	private int _startKey;
 
 	public readonly Dictionary<string, int> CurrentStock = new Dictionary<string, int>();
 
@@ -37,23 +47,23 @@ internal sealed class WarehouseStatsHistory
 	{
 		get
 		{
-			if (_days.Count != 0)
+			if (_startKey != 0)
 			{
-				return Math.Max(1, (WarehouseClock.UtcNow.Date - ParseKey(_days.Keys.First())).Days + 1);
+				return Math.Max(1, (UtcNow().Date - ParseKey(_startKey)).Days + 1);
 			}
 			return 0;
 		}
 	}
 
-	public int FirstDayKey
+	public int StartDayKey
 	{
 		get
 		{
-			if (_days.Count != 0)
+			if (_startKey != 0)
 			{
-				return _days.Keys.First();
+				return _startKey;
 			}
-			return Key(WarehouseClock.UtcNow.Date);
+			return Key(UtcNow().Date);
 		}
 	}
 
@@ -61,14 +71,22 @@ internal sealed class WarehouseStatsHistory
 	{
 		WarehouseStatsHistory warehouseStatsHistory = new WarehouseStatsHistory();
 		string[] array = (value ?? string.Empty).Split(new char[1] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
-		for (int i = 0; i < array.Length; i++)
+		foreach (string text in array)
 		{
-			string[] array2 = array[i].Split(new char[1] { '|' });
-			if (array2.Length == 8 && int.TryParse(array2[0], out var result))
+			if (text.StartsWith("S|", StringComparison.Ordinal))
+			{
+				if (int.TryParse(text.Substring("S|".Length), NumberStyles.None, CultureInfo.InvariantCulture, out var result) && IsValidKey(result))
+				{
+					warehouseStatsHistory._startKey = result;
+				}
+				continue;
+			}
+			string[] array2 = text.Split(new char[1] { '|' });
+			if (array2.Length == 8 && int.TryParse(array2[0], out var result2) && IsValidKey(result2))
 			{
 				Day day = new Day
 				{
-					Key = result
+					Key = result2
 				};
 				int.TryParse(array2[1], out day.Input);
 				int.TryParse(array2[2], out day.Output);
@@ -77,8 +95,13 @@ internal sealed class WarehouseStatsHistory
 				int.TryParse(array2[5], out day.Capacity);
 				ParseMap(array2[6], day.Inputs);
 				ParseMap(array2[7], day.Outputs);
-				warehouseStatsHistory._days[result] = day;
+				warehouseStatsHistory._days[result2] = day;
 			}
+		}
+		if (warehouseStatsHistory._startKey == 0 && warehouseStatsHistory._days.Count > 0)
+		{
+			warehouseStatsHistory._startKey = warehouseStatsHistory._days.Keys.First();
+			warehouseStatsHistory.Changed = true;
 		}
 		warehouseStatsHistory.Prune();
 		return warehouseStatsHistory;
@@ -113,58 +136,48 @@ internal sealed class WarehouseStatsHistory
 		}
 	}
 
-	public void SetSnapshot(List<ServersideQoLZDO> stores, Func<ServersideQoLZDO, IEnumerable<ItemData>> inventory)
+	public void SetSnapshot(Dictionary<string, int> stockByToken, int occupied, int capacity)
 	{
 		CurrentStock.Clear();
-		int num = 0;
-		foreach (ServersideQoLZDO store in stores)
+		if (stockByToken != null)
 		{
-			IEnumerable<ItemData> enumerable = inventory(store);
-			if (enumerable == null)
+			foreach (KeyValuePair<string, int> item in stockByToken)
 			{
-				continue;
-			}
-			bool flag = false;
-			foreach (ItemData item in enumerable.Where((ItemData x) => x != null && x.m_stack > 0 && x.m_shared != null))
-			{
-				flag = true;
-				string name = item.m_shared.m_name;
-				CurrentStock[name] = (CurrentStock.TryGetValue(name, out var value) ? (value + item.m_stack) : item.m_stack);
-			}
-			if (flag)
-			{
-				num++;
+				if (item.Value > 0)
+				{
+					CurrentStock[item.Key] = item.Value;
+				}
 			}
 		}
 		Day day = Today();
-		int num2 = CurrentStock.Values.Sum();
-		if (day.Stock != num2 || day.Occupied != num || day.Capacity != stores.Count)
+		int num = CurrentStock.Values.Sum();
+		if (day.Stock != num || day.Occupied != occupied || day.Capacity != capacity)
 		{
-			day.Stock = num2;
-			day.Occupied = num;
-			day.Capacity = stores.Count;
+			day.Stock = num;
+			day.Occupied = occupied;
+			day.Capacity = capacity;
 			Changed = true;
 		}
 	}
 
 	public List<Day> Window(int days)
 	{
-		int minimum = Key(WarehouseClock.UtcNow.Date.AddDays(-(Math.Max(1, days) - 1)));
+		int minimum = Key(UtcNow().Date.AddDays(-(Clamp(days) - 1)));
 		return _days.Values.Where((Day x) => x.Key >= minimum).ToList();
 	}
 
 	public List<Day> PreviousWindow(int days)
 	{
-		DateTime date = WarehouseClock.UtcNow.Date;
-		int minimum = Key(date.AddDays(-(Math.Max(1, days) * 2 - 1)));
-		int maximum = Key(date.AddDays(-Math.Max(1, days)));
+		DateTime date = UtcNow().Date;
+		int minimum = Key(date.AddDays(-(Clamp(days) * 2 - 1)));
+		int maximum = Key(date.AddDays(-Clamp(days)));
 		return _days.Values.Where((Day x) => x.Key >= minimum && x.Key <= maximum).ToList();
 	}
 
 	public Dictionary<string, int> SumItems(int days, bool input)
 	{
 		Dictionary<string, int> dictionary = new Dictionary<string, int>();
-		foreach (Day item in Window(days))
+		foreach (Day item in Window(Math.Min(Clamp(days), 90)))
 		{
 			foreach (KeyValuePair<string, int> item2 in input ? item.Inputs : item.Outputs)
 			{
@@ -174,24 +187,98 @@ internal sealed class WarehouseStatsHistory
 		return dictionary;
 	}
 
+	public bool TryCapacityForecast(int days, out double chestsPerDay, out double daysToFull, int minimumSpan = 7)
+	{
+		chestsPerDay = 0.0;
+		daysToFull = double.PositiveInfinity;
+		List<Day> list = (from day3 in Window(days)
+			where day3.Capacity > 0
+			select day3).ToList();
+		if (list.Count < 2)
+		{
+			return false;
+		}
+		Day day = list[0];
+		Day day2 = list[list.Count - 1];
+		int days2 = (ParseKey(day2.Key) - ParseKey(day.Key)).Days;
+		if (days2 < Math.Max(1, minimumSpan))
+		{
+			return false;
+		}
+		chestsPerDay = (double)(day2.Occupied - day.Occupied) / (double)days2;
+		int num = day2.Capacity - day2.Occupied;
+		if (num <= 0)
+		{
+			daysToFull = 0.0;
+		}
+		else if (chestsPerDay > 0.0)
+		{
+			daysToFull = (double)num / chestsPerDay;
+		}
+		return true;
+	}
+
+	public string ToCsv(Func<string, string> itemName)
+	{
+		StringBuilder stringBuilder = new StringBuilder("date;input;output;stock;occupied_chests;chests;top_input;top_output\n");
+		foreach (Day value in _days.Values)
+		{
+			stringBuilder.Append(ParseKey(value.Key).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)).Append(';').Append(value.Input)
+				.Append(';')
+				.Append(value.Output)
+				.Append(';')
+				.Append(value.Stock)
+				.Append(';')
+				.Append(value.Occupied)
+				.Append(';')
+				.Append(value.Capacity)
+				.Append(';')
+				.Append(Top(value.Inputs, itemName))
+				.Append(';')
+				.Append(Top(value.Outputs, itemName))
+				.Append('\n');
+		}
+		return stringBuilder.ToString();
+	}
+
+	private static string Top(Dictionary<string, int> map, Func<string, string> itemName)
+	{
+		if (map.Count == 0)
+		{
+			return string.Empty;
+		}
+		KeyValuePair<string, int> keyValuePair = map.OrderByDescending((KeyValuePair<string, int> x) => x.Value).ThenBy<KeyValuePair<string, int>, string>((KeyValuePair<string, int> x) => x.Key, StringComparer.Ordinal).First();
+		return (itemName?.Invoke(keyValuePair.Key) ?? keyValuePair.Key).Replace(";", ",") + " " + keyValuePair.Value.ToString(CultureInfo.InvariantCulture);
+	}
+
 	public string Serialize()
 	{
 		Prune();
 		Changed = false;
-		return string.Join("\n", _days.Values.Select((Day d) => string.Join("|", d.Key, d.Input, d.Output, d.Stock, d.Occupied, d.Capacity, FormatMap(d.Inputs), FormatMap(d.Outputs))));
+		IEnumerable<string> enumerable = _days.Values.Select((Day d) => string.Join("|", d.Key, d.Input, d.Output, d.Stock, d.Occupied, d.Capacity, FormatMap(d.Inputs), FormatMap(d.Outputs)));
+		if (_startKey != 0)
+		{
+			return string.Join("\n", new string[1] { "S|" + _startKey.ToString(CultureInfo.InvariantCulture) }.Concat(enumerable));
+		}
+		return string.Join("\n", enumerable);
 	}
 
 	private Day Today()
 	{
 		Prune();
-		int key = Key(WarehouseClock.UtcNow.Date);
-		if (!_days.TryGetValue(key, out var value))
+		int num = Key(UtcNow().Date);
+		if (_startKey == 0)
+		{
+			_startKey = num;
+			Changed = true;
+		}
+		if (!_days.TryGetValue(num, out var value))
 		{
 			value = new Day
 			{
-				Key = key
+				Key = num
 			};
-			_days[key] = value;
+			_days[num] = value;
 			Changed = true;
 		}
 		return value;
@@ -199,37 +286,53 @@ internal sealed class WarehouseStatsHistory
 
 	private void Prune()
 	{
-		int minimum = Key(WarehouseClock.UtcNow.Date.AddDays(-89.0));
-		foreach (int item in _days.Keys.Where((int x) => x < minimum).ToList())
+		DateTime date = UtcNow().Date;
+		int totalsMinimum = Key(date.AddDays(-364.0));
+		int detailMinimum = Key(date.AddDays(-89.0));
+		foreach (int item in _days.Keys.Where((int x) => x < totalsMinimum).ToList())
 		{
 			_days.Remove(item);
 			Changed = true;
 		}
+		foreach (Day item2 in _days.Values.Where((Day x) => x.Key < detailMinimum && (x.Inputs.Count > 0 || x.Outputs.Count > 0)))
+		{
+			item2.Inputs.Clear();
+			item2.Outputs.Clear();
+			Changed = true;
+		}
 	}
 
-	private static int Key(DateTime date)
+	internal static int Clamp(int days)
+	{
+		return Math.Max(1, Math.Min(365, days));
+	}
+
+	internal static int Key(DateTime date)
 	{
 		return date.Year * 10000 + date.Month * 100 + date.Day;
 	}
 
-	private static DateTime ParseKey(int key)
+	internal static DateTime ParseKey(int key)
 	{
 		return new DateTime(key / 10000, key / 100 % 100, key % 100);
 	}
 
+	private static bool IsValidKey(int key)
+	{
+		int num = key / 10000;
+		int num2 = key / 100 % 100;
+		int num3 = key % 100;
+		if (num >= 2000 && num <= 9999 && num2 >= 1 && num2 <= 12 && num3 >= 1)
+		{
+			return num3 <= DateTime.DaysInMonth(num, num2);
+		}
+		return false;
+	}
+
 	private static string FormatMap(Dictionary<string, int> map)
 	{
-		return string.Join(",", map.OrderBy(delegate(KeyValuePair<string, int> x)
-		{
-			KeyValuePair<string, int> keyValuePair = x;
-			return keyValuePair.Key;
-		}).Select(delegate(KeyValuePair<string, int> x)
-		{
-			KeyValuePair<string, int> keyValuePair = x;
-			string text = Uri.EscapeDataString(keyValuePair.Key);
-			keyValuePair = x;
-			return text + "=" + keyValuePair.Value.ToString(CultureInfo.InvariantCulture);
-		}));
+		return string.Join(",", from x in map.OrderBy<KeyValuePair<string, int>, string>((KeyValuePair<string, int> x) => x.Key, StringComparer.Ordinal)
+			select Uri.EscapeDataString(x.Key) + "=" + x.Value.ToString(CultureInfo.InvariantCulture));
 	}
 
 	private static void ParseMap(string value, Dictionary<string, int> map)

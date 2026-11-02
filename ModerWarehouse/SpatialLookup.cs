@@ -20,7 +20,7 @@ internal sealed class SpatialLookup<T> where T : class
 
 	private const float CellSize = 16f;
 
-	private readonly Dictionary<Tuple<int, int, int>, List<Entry>> cells = new Dictionary<Tuple<int, int, int>, List<Entry>>();
+	private readonly Dictionary<long, List<Entry>> cells = new Dictionary<long, List<Entry>>();
 
 	internal SpatialLookup(IEnumerable<T> items, Func<T, float> x, Func<T, float> y, Func<T, float> z)
 	{
@@ -35,7 +35,7 @@ internal sealed class SpatialLookup<T> where T : class
 				Z = z(item),
 				Order = num++
 			};
-			Tuple<int, int, int> key = Tuple.Create(Cell(entry.X), Cell(entry.Y), Cell(entry.Z));
+			long key = Pack(Cell(entry.X), Cell(entry.Y), Cell(entry.Z));
 			if (!cells.TryGetValue(key, out var value))
 			{
 				List<Entry> list = (cells[key] = new List<Entry>());
@@ -48,6 +48,11 @@ internal sealed class SpatialLookup<T> where T : class
 	private static int Cell(float value)
 	{
 		return (int)Math.Floor(value / 16f);
+	}
+
+	private static long Pack(int x, int y, int z)
+	{
+		return ((long)(x & 0x1FFFFF) << 42) | ((long)(y & 0x1FFFFF) << 21) | (z & 0x1FFFFF);
 	}
 
 	internal T Nearest(float x, float y, float z, float radiusSquared, Func<T, bool> include = null, bool preferLastOnTie = false)
@@ -90,7 +95,7 @@ internal sealed class SpatialLookup<T> where T : class
 			{
 				for (int k = Cell(z - num6); k <= Cell(z + num6); k++)
 				{
-					if (!cells.TryGetValue(Tuple.Create(i, j, k), out var value))
+					if (!cells.TryGetValue(Pack(i, j, k), out var value))
 					{
 						continue;
 					}

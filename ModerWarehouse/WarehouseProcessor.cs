@@ -22,6 +22,31 @@ namespace ModerWarehouse;
 [RunAfter<ContainerRegistryProcessor>]
 public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 {
+	private sealed class FillOrder
+	{
+		public ServersideQoLZDO Sign { get; }
+
+		public ServersideQoLZDO Chest { get; }
+
+		public string Payload { get; }
+
+		public FillOrder(ServersideQoLZDO sign, ServersideQoLZDO chest, string payload)
+		{
+			Sign = sign;
+			Chest = chest;
+			Payload = payload;
+		}
+	}
+
+	private sealed class StatsCacheEntry
+	{
+		public string Raw;
+
+		public WarehouseStatsHistory History;
+
+		public DateTime WrittenAt;
+	}
+
 	private sealed class PersistedContainerSpatialLookup
 	{
 		private readonly SpatialLookup<ZDO> lookup;
@@ -37,18 +62,12 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 		internal ZDO Nearest(ZDO sign, float range2)
 		{
-			//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-			//IL_000d: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0013: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0019: Unknown result type (might be due to invalid IL or missing references)
 			Vector3 position = sign.GetPosition();
 			return lookup.Nearest(position.x, position.y, position.z, range2, IsContainer, preferLastOnTie: true);
 		}
 
 		private bool IsContainer(ZDO candidate)
 		{
-			//IL_005e: Unknown result type (might be due to invalid IL or missing references)
 			//IL_0069: Expected O, but got Unknown
 			if (containers.Contains(candidate))
 			{
@@ -168,16 +187,13 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 		public ZDO Input { get; }
 
-		public int Infrastructure { get; }
-
 		public bool Canonical { get; }
 
-		public PersistedInputCandidate(string id, ZDO sign, ZDO input, int infrastructure, bool canonical)
+		public PersistedInputCandidate(string id, ZDO sign, ZDO input, bool canonical)
 		{
 			Id = id;
 			Sign = sign;
 			Input = input;
-			Infrastructure = infrastructure;
 			Canonical = canonical;
 		}
 	}
@@ -266,19 +282,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		public float OutBytesPerSecond { get; set; }
 
 		public float InBytesPerSecond { get; set; }
-	}
-
-	private sealed class PendingLabel
-	{
-		public string ItemType { get; }
-
-		public DateTime Since { get; }
-
-		public PendingLabel(string itemType, DateTime since)
-		{
-			ItemType = itemType;
-			Since = since;
-		}
 	}
 
 	private sealed class StockEntry
@@ -384,7 +387,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	internal static readonly Regex Marker = new Regex("^\\s*\\[WH:(?<id>[A-Za-z0-9_-]+):(?<role>IN|OUT|REQ|INFO|BOARD|STATS)\\](?<payload>[\\s\\S]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+	private static readonly Regex MarkerRegex = new Regex("^\\s*\\[WH:(?<id>[A-Za-z0-9_-]+):(?<role>IN|OUT|REQ|INFO|BOARD|STATS|FILL)\\](?<payload>[\\s\\S]*)$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+	internal static readonly WarehouseText.MatchCache Marker = new WarehouseText.MatchCache(MarkerRegex);
 
 	internal static readonly Regex IgnoreMarker = new Regex("^\\s*\\[WH:IGNORE\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -392,37 +397,37 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	internal static readonly Regex CleanMarker = new Regex("^\\s*\\[WH:CLEAN\\]\\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-	private const string RequestWarehouseKey = "ModerWarehouse.RequestWarehouse";
+	private static readonly int RequestWarehouseKey = KeyHash("ModerWarehouse.RequestWarehouse");
 
-	private const string InfoWarehouseKey = "ModerWarehouse.InfoWarehouse";
+	private static readonly int InfoWarehouseKey = KeyHash("ModerWarehouse.InfoWarehouse");
 
-	private const string BoardWarehouseKey = "ModerWarehouse.BoardWarehouse";
+	private static readonly int BoardWarehouseKey = KeyHash("ModerWarehouse.BoardWarehouse");
 
-	private const string BoardGroupKey = "ModerWarehouse.BoardGroup";
+	private static readonly int BoardGroupKey = KeyHash("ModerWarehouse.BoardGroup");
 
-	private const string BoardCellKey = "ModerWarehouse.BoardCell";
+	private static readonly int BoardCellKey = KeyHash("ModerWarehouse.BoardCell");
 
-	private const string BoardRenderedTextKey = "ModerWarehouse.BoardRenderedText";
+	private static readonly int BoardRenderedTextKey = KeyHash("ModerWarehouse.BoardRenderedText");
 
-	private const string StatsWarehouseKey = "ModerWarehouse.StatsWarehouse";
+	private static readonly int StatsWarehouseKey = KeyHash("ModerWarehouse.StatsWarehouse");
 
-	private const string StatsGroupKey = "ModerWarehouse.StatsGroup";
+	private static readonly int StatsGroupKey = KeyHash("ModerWarehouse.StatsGroup");
 
-	private const string StatsCellKey = "ModerWarehouse.StatsCell";
+	private static readonly int StatsCellKey = KeyHash("ModerWarehouse.StatsCell");
 
-	private const string StatsHistoryKey = "ModerWarehouse.StatsHistory";
+	private static readonly int StatsHistoryKey = KeyHash("ModerWarehouse.StatsHistory");
 
-	private const string StatsControlKey = "ModerWarehouse.StatsControl";
+	private static readonly int StatsControlKey = KeyHash("ModerWarehouse.StatsControl");
 
-	private const string RequestRenderedTextKey = "ModerWarehouse.RequestRenderedText";
+	private static readonly int RequestRenderedTextKey = KeyHash("ModerWarehouse.RequestRenderedText");
 
-	private const string RequestTargetsKey = "ModerWarehouse.RequestTargets";
+	private static readonly int RequestTargetsKey = KeyHash("ModerWarehouse.RequestTargets");
 
-	private const string HelpGroupKey = "ModerWarehouse.HelpGroup";
+	private static readonly int HelpGroupKey = KeyHash("ModerWarehouse.HelpGroup");
 
-	private const string HelpChildKey = "ModerWarehouse.HelpChild";
+	private static readonly int HelpChildKey = KeyHash("ModerWarehouse.HelpChild");
 
-	private const string HelpWarehouseKey = "ModerWarehouse.HelpWarehouse";
+	private static readonly int HelpWarehouseKey = KeyHash("ModerWarehouse.HelpWarehouse");
 
 	private const int BoardColumns = 4;
 
@@ -442,23 +447,25 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private const int StatsAnchorCell = 12;
 
-	private const string AutoChestXKey = "ModerWarehouse.AutoChestX";
+	private static readonly int AutoChestXKey = KeyHash("ModerWarehouse.AutoChestX");
 
-	private const string AutoChestYKey = "ModerWarehouse.AutoChestY";
+	private static readonly int AutoChestYKey = KeyHash("ModerWarehouse.AutoChestY");
 
-	private const string AutoChestZKey = "ModerWarehouse.AutoChestZ";
+	private static readonly int AutoChestZKey = KeyHash("ModerWarehouse.AutoChestZ");
 
-	private const string AutoLabelItemKey = "ModerWarehouse.AutoLabelItem";
+	private static readonly int AutoLabelItemKey = KeyHash("ModerWarehouse.AutoLabelItem");
 
-	private const string AutoLabelManagedKey = "ModerWarehouse.AutoLabelManaged";
+	private static readonly int AutoLabelManagedKey = KeyHash("ModerWarehouse.AutoLabelManaged");
 
-	private const string InputRadiusKey = "ModerWarehouse.InputRadius";
+	private static readonly int AutoLabelWarehouseKey = KeyHash("ModerWarehouse.AutoLabelWarehouse");
 
-	private const string InputWarehouseKey = "ModerWarehouse.InputWarehouse";
+	private static readonly int AutoLabelPriorityKey = KeyHash("ModerWarehouse.AutoLabelPriority");
 
-	private const string InputCanonicalKey = "ModerWarehouse.InputCanonical";
+	private static readonly int InputRadiusKey = KeyHash("ModerWarehouse.InputRadius");
 
-	private const float GroupRecoveryDistance = 50f;
+	private static readonly int InputWarehouseKey = KeyHash("ModerWarehouse.InputWarehouse");
+
+	private static readonly int InputCanonicalKey = KeyHash("ModerWarehouse.InputCanonical");
 
 	private readonly HashSet<ServersideQoLZDO> _signs = new HashSet<ServersideQoLZDO>();
 
@@ -478,9 +485,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private SectorDictionary<HashSet<ServersideQoLZDO>> _containers;
 
-	private readonly Dictionary<ServersideQoLZDO, PendingLabel> _pendingLabels = new Dictionary<ServersideQoLZDO, PendingLabel>();
-
 	private readonly Dictionary<ServersideQoLZDO, string> _labelItemTokens = new Dictionary<ServersideQoLZDO, string>();
+
+	private readonly Dictionary<ServersideQoLZDO, string> _labelWarehouseIds = new Dictionary<ServersideQoLZDO, string>();
+
+	private readonly Dictionary<ServersideQoLZDO, int> _labelPriorities = new Dictionary<ServersideQoLZDO, int>();
 
 	private readonly Dictionary<ServersideQoLZDO, DateTime> _requestClearAt = new Dictionary<ServersideQoLZDO, DateTime>();
 
@@ -536,7 +545,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private readonly Dictionary<string, PerfWindow> _performanceWindows = new Dictionary<string, PerfWindow>(StringComparer.OrdinalIgnoreCase);
 
-	private readonly Dictionary<string, DateTime> _boardAwakeUntil = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+	private List<string> _acceptedWarehouseIds = new List<string>();
+
+	private readonly Dictionary<string, Vector3[]> _panelPositions = new Dictionary<string, Vector3[]>(StringComparer.OrdinalIgnoreCase);
 
 	private readonly Dictionary<string, Dictionary<string, int>> _warehouseStockSnapshots = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
 
@@ -548,7 +559,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private DateTime _globalInputValidationAt;
 
-	private string _validatedTopology;
+	private DateTime _worldStockRefreshAt;
+
+	private readonly Dictionary<string, string> _validatedTopologyParts = new Dictionary<string, string>(StringComparer.Ordinal);
 
 	private readonly Dictionary<string, RequestSearchNotice> _requestSearchNotices = new Dictionary<string, RequestSearchNotice>(StringComparer.OrdinalIgnoreCase);
 
@@ -598,6 +611,64 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static readonly Dictionary<int, bool> SignPrefabs = new Dictionary<int, bool>();
 
+	private readonly Dictionary<string, ServersideQoLZDO> _boardAnchors = new Dictionary<string, ServersideQoLZDO>(StringComparer.Ordinal);
+
+	private readonly StringBuilder _cycleDetail = new StringBuilder();
+
+	private Stopwatch _markWatch;
+
+	private double _markLast;
+
+	private readonly Dictionary<string, DateTime> _compactAt = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<string, Dictionary<string, int>> _noSpace = new Dictionary<string, Dictionary<string, int>>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<string, DeliveryNotice> _noSpaceNotices = new Dictionary<string, DeliveryNotice>(StringComparer.OrdinalIgnoreCase);
+
+	private const double StatsWriteSeconds = 60.0;
+
+	private readonly Dictionary<ServersideQoLZDO, StatsCacheEntry> _statsCache = new Dictionary<ServersideQoLZDO, StatsCacheEntry>();
+
+	private readonly Dictionary<string, string> _skipReported = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<List<ServersideQoLZDO>, Dictionary<(ServersideQoLZDO, float), ServersideQoLZDO>> _nearestMemo = new Dictionary<List<ServersideQoLZDO>, Dictionary<(ServersideQoLZDO, float), ServersideQoLZDO>>();
+
+	private readonly Dictionary<string, DateTime> _miscJanitorAt = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<string, string> _quarantineReported = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<ZDOID, KeyValuePair<uint, PersistedContainer>> _decodedContainers = new Dictionary<ZDOID, KeyValuePair<uint, PersistedContainer>>();
+
+	private readonly Queue<ServersideQoLZDO> _warmQueue = new Queue<ServersideQoLZDO>();
+
+	private readonly HashSet<ServersideQoLZDO> _warmQueued = new HashSet<ServersideQoLZDO>();
+
+	private readonly Dictionary<string, DateTime> _warmDeadline = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+	private readonly Dictionary<string, DateTime> _warmArmedAt = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+
+	private int _warmFrame = -1;
+
+	private double _warmSpentMs;
+
+	private Type _warmStateType;
+
+	private FieldInfo _warmInventoryField;
+
+	private bool _warmReflectionFailed;
+
+	private const int WarmUpThreshold = 48;
+
+	private const double WarmUpBudgetMs = 4.0;
+
+	private const double WarmUpMaxSeconds = 3.0;
+
+	private const double WarmUpRearmSeconds = 60.0;
+
+	private const string LabelSeparator = "\u001f";
+
+	private static readonly Dictionary<string, string[]> AliasCache = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
 	private IEnumerable<ServersideQoLZDO> StorageSigns
 	{
 		get
@@ -607,10 +678,14 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
+	private static int KeyHash(string key)
+	{
+		return StringExtensionMethods.GetStableHashCode(key);
+	}
+
 	protected override void Initialize()
 	{
 		_signs.Clear();
-		_pendingLabels.Clear();
 		_requestClearAt.Clear();
 		_orphanBoardSeenAt.Clear();
 		_boardControls.Clear();
@@ -628,7 +703,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_warehousesRunning.Clear();
 		_warehousesDirty.Clear();
 		_knownNodes.Clear();
-		_validatedTopology = null;
+		_validatedTopologyParts.Clear();
 		_lastAwake.Clear();
 		_lastCompleted.Clear();
 		_spatialLookups.Clear();
@@ -637,14 +712,27 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_slowCycleLoggedAt.Clear();
 		_slowSampleAt.Clear();
 		_performanceWindows.Clear();
-		_boardAwakeUntil.Clear();
+		_panelPositions.Clear();
+		_acceptedWarehouseIds = new List<string>();
+		_boardAnchors.Clear();
+		_quarantineReported.Clear();
+		_noSpace.Clear();
+		_noSpaceNotices.Clear();
+		_skipReported.Clear();
+		_statsCache.Clear();
 		_warehouseStockSnapshots.Clear();
 		_warehouseStockTimes.Clear();
 		_freshlyReadWarehouses.Clear();
 		_globalInputErrors.Clear();
 		_globalInputValidationAt = DateTime.MinValue;
+		_worldStockRefreshAt = DateTime.MinValue;
 		_requestSearchNotices.Clear();
 		_inventoryIndex.Clear();
+		_warmQueue.Clear();
+		_warmQueued.Clear();
+		_warmDeadline.Clear();
+		_warmArmedAt.Clear();
+		_decodedContainers.Clear();
 		InitializePerformanceLog();
 		InitializeStockCache();
 		EnsureWorldIndex();
@@ -652,13 +740,15 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_containers = val.GetContainers(100f);
 		val.ContainerChanged -= OnContainerChanged;
 		val.ContainerChanged += OnContainerChanged;
+		ZNet.WorldSaveStarted = (Action)Delegate.Remove(ZNet.WorldSaveStarted, new Action(OnWorldSaveStarted));
+		ZNet.WorldSaveStarted = (Action)Delegate.Combine(ZNet.WorldSaveStarted, new Action(OnWorldSaveStarted));
 		WarehouseLocalization.Initialize(delegate(string message)
 		{
 			this.Logger.LogInfo((object)message);
 		});
 		LoadGermanNames();
-		this.Logger.LogInfo((object)(WarehousePlugin.Name + " " + WarehousePlugin.Version + ": localization, configurable capacity alerts, player-safe input ownership, solo-friendly visit deltas, target stock shopping list, delivery confirmation, automatic IN help sign, interactive rotating 4x4 stock board, rolling 4x4 statistics board, persistent linked automatic signs, safe transfers and multi-item withdrawal initialized; " + $"{GermanNames.Count} EN/DE item names loaded."));
-		this.Logger.LogInfo((object)"Performance revision spatial-local-20260923: local labels, spatial links, coalesced scheduling, on-demand world reads.");
+		this.Logger.LogInfo((object)(WarehousePlugin.Name + " " + WarehousePlugin.Version + ": localization, configurable capacity alerts, player-safe input ownership, solo-friendly visit deltas, target stock shopping list, delivery confirmation, automatic IN help sign, interactive rotating 4x4 stock board, rolling 4x4 statistics board, persistent linked automatic signs, safe transfers and multi-item withdrawal initialized; " + $"{GermanNames.Count} EN/DE item names loaded; based on Moder Warehouse 2.0.3, build " + WarehousePlugin.BuildId + "."));
+		this.Logger.LogInfo((object)("Performance revision " + WarehousePlugin.BuildId + ": memoized sign/label text, per-type item aliases, warehouse-scoped change events, cached panel positions, throttled statistics writes, world index for read-only stock queries, inventory warm-up."));
 		this.Logger.LogInfo((object)"Local patch 10: craft accepts * wildcards; patch 9: ModerWarehouse owns chest signs inside a warehouse (ContainerSigns contents lists are adopted as labels, 'Item 123' labels mean Item); patch 8: one save per chest per cycle; patch 7: faster world scans; patch 6: craft also covers hammer/hoe/cultivator pieces; patch 5: REQ/INFO links and help sign survive ContainerSigns sign recreation, craft REQ (craft <item> [lvl N] [xN]), wildcard REQ (*), sign-only IN/OUT marker scan, stale IN lock release (owner-based).");
 	}
 
@@ -670,11 +760,23 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			_inventoryIndex.Remove(changed);
 			_cycleInventories?.Remove(changed);
 		}
+		if (_knownNodes.Count > 0)
+		{
+			WarehouseNode[] array = _knownNodes.Values.ToArray();
+			foreach (WarehouseNode warehouseNode in array)
+			{
+				if ((changed == null || !(Distance2(changed, warehouseNode.Input) > warehouseNode.Radius * warehouseNode.Radius)) && _warehousesDirty.Add(warehouseNode.Id))
+				{
+					this.ScheduleReprocessing(warehouseNode.Sign, 0.5f);
+				}
+			}
+			return;
+		}
 		HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		foreach (ServersideQoLZDO sign in _signs)
 		{
 			string text = WarehouseId(sign);
-			if (!string.IsNullOrWhiteSpace(text) && hashSet.Add(text) && (changed == null || !_knownNodes.TryGetValue(text, out var value) || !(Distance2(changed, value.Input) > value.Radius * value.Radius)) && _warehousesDirty.Add(text))
+			if (!string.IsNullOrWhiteSpace(text) && hashSet.Add(text) && _warehousesDirty.Add(text))
 			{
 				this.ScheduleReprocessing(sign, 0.5f);
 			}
@@ -696,8 +798,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		try
 		{
 			Directory.CreateDirectory(text);
-			File.WriteAllText(_performanceLogPath, WarehousePlugin.Name + " " + WarehousePlugin.Version + " performance log\r\n" + $"Started UTC: {WarehouseClock.UtcNow:O}\r\n" + "Revision: spatial-local-20260923; SUMMARY phase times are independent maxima; SLOW sampled at most once per 10s; skipped means throttled callbacks, not failed work.\r\nUTC | kind | warehouse | state | cycles | skipped | avg_ms | max_ms | topology_ms | classify_ms | display_ms | transfer_ms | containers | signs | stores | inventory_reads | peers | ping_avg_ms | ping_max_ms | local_quality_min | remote_quality_min | out_Bps | in_Bps\r\n", Encoding.UTF8);
-			DeleteLegacyLog(Path.Combine(Paths.BepInExRootPath, "ModerWarehouse-performance.log"), "performance");
+			File.WriteAllText(_performanceLogPath, WarehousePlugin.Name + " " + WarehousePlugin.Version + " performance log\r\n" + $"Started UTC: {WarehouseClock.UtcNow:O}\r\n" + "Revision: " + WarehousePlugin.BuildId + "; SUMMARY phase times are independent maxima; SLOW sampled at most once per 10s; skipped means throttled callbacks, not failed work.\r\nUTC | kind | warehouse | state | cycles | skipped | avg_ms | max_ms | topology_ms | classify_ms | display_ms | transfer_ms | containers | signs | stores | inventory_reads | peers | ping_avg_ms | ping_max_ms | local_quality_min | remote_quality_min | out_Bps | in_Bps\r\n", Encoding.UTF8);
 			this.Logger.LogInfo((object)("Performance log reset: " + _performanceLogPath));
 		}
 		catch (Exception ex)
@@ -813,18 +914,16 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static string WarehouseId(ServersideQoLZDO sign)
 	{
-		//IL_0065: Unknown result type (might be due to invalid IL or missing references)
-		//IL_006a: Unknown result type (might be due to invalid IL or missing references)
-		string[] array = new string[4] { "ModerWarehouse.RequestWarehouse", "ModerWarehouse.InfoWarehouse", "ModerWarehouse.BoardWarehouse", "ModerWarehouse.StatsWarehouse" };
-		foreach (string text in array)
+		int[] array = new int[4] { RequestWarehouseKey, InfoWarehouseKey, BoardWarehouseKey, StatsWarehouseKey };
+		foreach (int num in array)
 		{
-			string text2 = sign.ZDO.GetString(text, string.Empty);
-			if (!string.IsNullOrWhiteSpace(text2))
+			string text = sign.ZDO.GetString(num, string.Empty);
+			if (!string.IsNullOrWhiteSpace(text))
 			{
-				return text2.Trim();
+				return text.Trim();
 			}
 		}
-		Regex marker = Marker;
+		WarehouseText.MatchCache marker = Marker;
 		ServersideQoLZDO.ZDOVars vars = sign.Vars;
 		Match match = marker.Match(PlainText(vars.GetText("")));
 		if (!match.Success)
@@ -841,18 +940,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	protected override ProcessResult Process(ServersideQoLZDO zdo, IReadOnlyList<Peer> peers, ProcessorPrefabInfo<Sign> prefabInfo)
 	{
-		//IL_0055: Unknown result type (might be due to invalid IL or missing references)
-		//IL_005a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0b48: Unknown result type (might be due to invalid IL or missing references)
-		//IL_07ff: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0d33: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0f7a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0940: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0f14: Unknown result type (might be due to invalid IL or missing references)
-		//IL_090d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0b15: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0ad9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0a2b: Unknown result type (might be due to invalid IL or missing references)
 		zdo.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
 		ServersideQoLZDO.ZDOVars vars = zdo.Vars;
 		string text = PlainText(vars.GetText(""));
@@ -869,10 +956,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		if (DeleteMarker.IsMatch(text))
 		{
-			string boardGroup = zdo.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty);
+			string boardGroup = zdo.ZDO.GetString(BoardGroupKey, string.Empty);
 			if (!string.IsNullOrWhiteSpace(boardGroup))
 			{
-				foreach (ServersideQoLZDO item2 in _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == boardGroup).ToList())
+				foreach (ServersideQoLZDO item2 in _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString(BoardGroupKey, string.Empty) == boardGroup).ToList())
 				{
 					_signs.Remove(item2);
 					item2.Destroy();
@@ -880,10 +967,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				this.Logger.LogInfo((object)("Deleted warehouse board group '" + boardGroup + "'."));
 				return (ProcessResult)4;
 			}
-			string statsGroup = zdo.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty);
+			string statsGroup = zdo.ZDO.GetString(StatsGroupKey, string.Empty);
 			if (!string.IsNullOrWhiteSpace(statsGroup))
 			{
-				foreach (ServersideQoLZDO item3 in _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty) == statsGroup).ToList())
+				foreach (ServersideQoLZDO item3 in _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString(StatsGroupKey, string.Empty) == statsGroup).ToList())
 				{
 					_signs.Remove(item3);
 					item3.Destroy();
@@ -912,82 +999,81 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			RestoreChestSignLinks(zdo, text);
 		}
-		string text2 = zdo.ZDO.GetString("ModerWarehouse.RequestWarehouse", string.Empty);
-		string text3 = zdo.ZDO.GetString("ModerWarehouse.InfoWarehouse", string.Empty);
-		string text4 = zdo.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty);
-		string text5 = zdo.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty);
+		string text2 = zdo.ZDO.GetString(RequestWarehouseKey, string.Empty);
+		string text3 = zdo.ZDO.GetString(InfoWarehouseKey, string.Empty);
+		string text4 = zdo.ZDO.GetString(BoardWarehouseKey, string.Empty);
+		string text5 = zdo.ZDO.GetString(StatsWarehouseKey, string.Empty);
 		if (match.Success && match.Groups["role"].Value.Equals("REQ", StringComparison.OrdinalIgnoreCase))
 		{
 			text2 = match.Groups["id"].Value;
-			zdo.ZDO.Set("ModerWarehouse.RequestWarehouse", text2);
+			zdo.ZDO.Set(RequestWarehouseKey, text2);
 			SaveChestSignLinks(zdo);
 		}
 		if (match.Success && match.Groups["role"].Value.Equals("INFO", StringComparison.OrdinalIgnoreCase))
 		{
 			text3 = match.Groups["id"].Value;
-			zdo.ZDO.Set("ModerWarehouse.InfoWarehouse", text3);
+			zdo.ZDO.Set(InfoWarehouseKey, text3);
 			SaveChestSignLinks(zdo);
 		}
 		if (match.Success && match.Groups["role"].Value.Equals("BOARD", StringComparison.OrdinalIgnoreCase))
 		{
 			text4 = match.Groups["id"].Value;
-			zdo.ZDO.Set("ModerWarehouse.BoardWarehouse", text4);
-			if (string.IsNullOrWhiteSpace(zdo.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty)))
+			zdo.ZDO.Set(BoardWarehouseKey, text4);
+			if (string.IsNullOrWhiteSpace(zdo.ZDO.GetString(BoardGroupKey, string.Empty)))
 			{
-				zdo.ZDO.Set("ModerWarehouse.BoardGroup", Guid.NewGuid().ToString("N"));
+				zdo.ZDO.Set(BoardGroupKey, Guid.NewGuid().ToString("N"));
 			}
-			zdo.ZDO.Set("ModerWarehouse.BoardCell", 12);
+			zdo.ZDO.Set(BoardCellKey, 12, false);
 			EnsureBoard(zdo, text4);
 		}
 		if (match.Success && match.Groups["role"].Value.Equals("STATS", StringComparison.OrdinalIgnoreCase))
 		{
 			text5 = match.Groups["id"].Value;
-			zdo.ZDO.Set("ModerWarehouse.StatsWarehouse", text5);
-			if (string.IsNullOrWhiteSpace(zdo.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty)))
+			zdo.ZDO.Set(StatsWarehouseKey, text5);
+			if (string.IsNullOrWhiteSpace(zdo.ZDO.GetString(StatsGroupKey, string.Empty)))
 			{
-				zdo.ZDO.Set("ModerWarehouse.StatsGroup", Guid.NewGuid().ToString("N"));
+				zdo.ZDO.Set(StatsGroupKey, Guid.NewGuid().ToString("N"));
 			}
-			zdo.ZDO.Set("ModerWarehouse.StatsCell", 12);
+			zdo.ZDO.Set(StatsCellKey, 12, false);
 			EnsureStatsBoard(zdo, text5);
 		}
 		if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
 		{
 			string text6 = match.Groups["id"].Value.Trim();
 			float radius = ParseInputRadius(match.Groups["payload"].Value);
-			WarehouseRenamePolicy.TryResolvePreviousId(zdo.ZDO.GetString("ModerWarehouse.InputWarehouse", string.Empty), text6, out var previousId);
+			WarehouseRenamePolicy.TryResolvePreviousId(zdo.ZDO.GetString(InputWarehouseKey, string.Empty), text6, out var previousId);
 			bool flag = HasOtherInputWithId(zdo, text6);
 			if (WarehouseRenamePolicy.CanApplyRename(previousId, text6, flag))
 			{
 				MigrateWarehouseSigns(zdo, previousId, text6, radius);
-				zdo.ZDO.Set("ModerWarehouse.InputWarehouse", text6);
+				zdo.ZDO.Set(InputWarehouseKey, text6);
 			}
 			else if (string.IsNullOrWhiteSpace(previousId) && !flag)
 			{
-				zdo.ZDO.Set("ModerWarehouse.InputWarehouse", text6);
+				zdo.ZDO.Set(InputWarehouseKey, text6);
 			}
 			else if (WarehouseRenamePolicy.ShouldLogRenameConflict(previousId, flag))
 			{
 				this.Logger.LogWarning((object)("Warehouse rename to '" + text6 + "' was not applied: another IN marker already uses that name."));
 			}
-			zdo.ZDO.Set("ModerWarehouse.InputRadius", ParseInputRadius(match.Groups["payload"].Value));
+			zdo.ZDO.Set(InputRadiusKey, ParseInputRadius(match.Groups["payload"].Value));
 			EnsureHelpSign(zdo, text6, ResolveLanguage(match.Groups["payload"].Value));
 		}
 		if (!string.IsNullOrWhiteSpace(text2))
 		{
 			string text7 = (match.Success ? match.Groups["payload"].Value.Trim() : text.Trim());
-			string text8 = zdo.ZDO.GetString("ModerWarehouse.RequestRenderedText", string.Empty);
+			string text8 = zdo.ZDO.GetString(RequestRenderedTextKey, string.Empty);
 			if (string.IsNullOrWhiteSpace(text7))
 			{
 				_requestClearAt.Remove(zdo);
-				WriteRequestPrompt(zdo, text2, LanguageForWarehouse(text2));
+				WriteRequestPrompt(zdo, LanguageForWarehouse(text2));
 				return this.ScheduleReprocessing(Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value));
 			}
-			if (text7.StartsWith("SOLL ", StringComparison.OrdinalIgnoreCase) || text7.StartsWith("TARGET ", StringComparison.OrdinalIgnoreCase))
+			if (RequestPolicy.TryStripKeyword(text7, WarehouseLocalization.TargetKeywords(), out var rest))
 			{
-				int startIndex = (text7.StartsWith("SOLL ", StringComparison.OrdinalIgnoreCase) ? 5 : 7);
-				if (TryParseTargets(text7.Substring(startIndex).Trim(), out var targets))
+				if (TryParseTargets(rest, out var targets))
 				{
-					zdo.ZDO.Set("ModerWarehouse.RequestTargets", SerializeTargets(targets));
+					zdo.ZDO.Set(RequestTargetsKey, SerializeTargets(targets));
 					SaveChestSignLinks(zdo);
 					this.Logger.LogInfo((object)$"Warehouse '{text2}': saved {targets.Count} target stock value(s).");
 					ProcessWarehouse(text2, peers, force: true);
@@ -995,7 +1081,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				else
 				{
 					string language = LanguageForWarehouse(text2);
-					WriteRequestText(zdo, "<color=#ff6666>" + WarehouseLocalization.Text(language, "request.error_example") + "\n<color=white>" + WarehouseLocalization.Text(language, "request.target") + " Wood 1000");
+					WriteRequestText(zdo, "<color=#ff6666>" + WarehouseLocalization.Text(language, "request.error_example") + "\n<color=white>" + WarehouseLocalization.Text(language, "request.target") + " " + WarehouseLocalization.Text(language, "request.example_item") + " 1000");
 				}
 				return this.ScheduleReprocessing(Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value));
 			}
@@ -1013,7 +1099,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				if (_requestClearAt.TryGetValue(zdo, out var value) && WarehouseClock.UtcNow >= value)
 				{
 					_requestClearAt.Remove(zdo);
-					WriteRequestPrompt(zdo, text2, LanguageForWarehouse(text2));
+					WriteRequestPrompt(zdo, LanguageForWarehouse(text2));
 					ProcessWarehouse(text2, peers, force: true);
 				}
 				else
@@ -1031,7 +1117,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				if (WarehouseClock.UtcNow >= value2)
 				{
-					WriteRequestPrompt(zdo, text2, LanguageForWarehouse(text2));
+					WriteRequestPrompt(zdo, LanguageForWarehouse(text2));
 					_requestClearAt.Remove(zdo);
 				}
 				return this.ScheduleReprocessing(Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value));
@@ -1047,13 +1133,13 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		if (!string.IsNullOrWhiteSpace(text4))
 		{
-			string group = zdo.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty);
-			int num2 = zdo.ZDO.GetInt("ModerWarehouse.BoardCell", -1);
+			string group = zdo.ZDO.GetString(BoardGroupKey, string.Empty);
+			int num2 = zdo.ZDO.GetInt(BoardCellKey, -1);
 			CaptureBoardControlInput(zdo, group, num2);
 			if (!string.IsNullOrWhiteSpace(group))
 			{
 				DateTime value3;
-				if (_signs.Any((ServersideQoLZDO sign) => sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == group && sign.ZDO.GetInt("ModerWarehouse.BoardCell", -1) == 12))
+				if (HasBoardAnchor(group))
 				{
 					_orphanBoardSeenAt.Remove(group);
 				}
@@ -1063,7 +1149,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				else if ((WarehouseClock.UtcNow - value3).TotalSeconds >= 10.0)
 				{
-					List<ServersideQoLZDO> list2 = _signs.Where((ServersideQoLZDO sign) => sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == group).ToList();
+					List<ServersideQoLZDO> list2 = _signs.Where((ServersideQoLZDO sign) => sign.ZDO.GetString(BoardGroupKey, string.Empty) == group).ToList();
 					foreach (ServersideQoLZDO item4 in list2)
 					{
 						_signs.Remove(item4);
@@ -1086,26 +1172,12 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		if (!string.IsNullOrWhiteSpace(text5))
 		{
-			int num3 = zdo.ZDO.GetInt("ModerWarehouse.StatsCell", -1);
-			string statsGroup2 = zdo.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty);
-			if (num3 == 6 && !string.IsNullOrWhiteSpace(zdo.ZDO.GetString("ModerWarehouse.StatsHistory", string.Empty)))
-			{
-				foreach (ServersideQoLZDO item5 in _signs.Where((ServersideQoLZDO x) => x != zdo && x.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty) == statsGroup2).ToList())
-				{
-					_signs.Remove(item5);
-					item5.Destroy();
-				}
-				zdo.ZDO.Set("ModerWarehouse.StatsCell", 12);
-				_statsReadyGroups.Remove(statsGroup2);
-				_statsEnsurePendingAt.Remove(statsGroup2);
-				this.Logger.LogInfo((object)("Warehouse '" + text5 + "': migrated 3x3 statistics board to 4x4."));
-				num3 = 12;
-			}
+			int num3 = zdo.ZDO.GetInt(StatsCellKey, -1);
 			if (num3 == 12)
 			{
 				EnsureStatsBoard(zdo, text5);
 			}
-			if (num3 == 12 || zdo.ZDO.GetBool("ModerWarehouse.StatsControl", false))
+			if (num3 == 12 || zdo.ZDO.GetBool(StatsControlKey, false))
 			{
 				ProcessWarehouse(text5, peers);
 			}
@@ -1122,13 +1194,29 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return this.ScheduleReprocessing(Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value));
 	}
 
+	private bool HasBoardAnchor(string group)
+	{
+		if (_boardAnchors.TryGetValue(group, out var value) && _signs.Contains(value) && value.ZDO.GetString(BoardGroupKey, string.Empty) == group && value.ZDO.GetInt(BoardCellKey, -1) == 12)
+		{
+			return true;
+		}
+		ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetString(BoardGroupKey, string.Empty) == group && sign.ZDO.GetInt(BoardCellKey, -1) == 12));
+		if (val != null)
+		{
+			_boardAnchors[group] = val;
+		}
+		else
+		{
+			_boardAnchors.Remove(group);
+		}
+		return val != null;
+	}
+
 	private string LanguageForWarehouse(string id)
 	{
-		//IL_001f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0024: Unknown result type (might be due to invalid IL or missing references)
 		foreach (ServersideQoLZDO sign in _signs)
 		{
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			ServersideQoLZDO.ZDOVars vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
 			if (match.Success && match.Groups["id"].Value.Equals(id, StringComparison.OrdinalIgnoreCase) && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
@@ -1151,7 +1239,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			return;
 		}
-		string text = id.Trim();
+		WarmInventories();
+		string text = CanonicalWarehouseId(id.Trim());
 		DateTime utcNow = WarehouseClock.UtcNow;
 		if (_warehousesRunning.Contains(text))
 		{
@@ -1177,7 +1266,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_cycleInventories = new Dictionary<ServersideQoLZDO, IInventory>();
 		_cycleContainers = (_cycleSigns = (_cycleStores = (_cycleInventoryReads = 0)));
 		_cycleTopologyMs = (_cycleClassifyMs = (_cycleDisplayMs = (_cycleTransferMs = 0L)));
-		CapturePeerMetrics(peers);
+		CapturePeerMetrics();
 		Stopwatch stopwatch = Stopwatch.StartNew();
 		try
 		{
@@ -1189,6 +1278,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			stopwatch.Stop();
 			_cycleInventories = null;
 			_spatialLookups.Clear();
+			_nearestMemo.Clear();
 			_storageSigns = null;
 			_localStorage = null;
 			_warehousesRunning.Remove(text);
@@ -1211,44 +1301,78 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			return false;
 		}
 		float distance2 = Mathf.Pow(Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.BoardWakeDistance.Value), 2f);
+		if (_panelPositions.TryGetValue(id, out var value))
+		{
+			foreach (Peer peer in peers)
+			{
+				if (peer == null)
+				{
+					continue;
+				}
+				Vector3[] array = value;
+				foreach (Vector3 val in array)
+				{
+					Vector3 val2 = peer.RefPos - val;
+					if (val2.sqrMagnitude <= distance2)
+					{
+						return true;
+					}
+				}
+			}
+			return false;
+		}
 		return _signs.Any(delegate(ServersideQoLZDO sign)
 		{
-			string text = sign.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty);
-			string text2 = sign.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty);
+			string text = sign.ZDO.GetString(BoardWarehouseKey, string.Empty);
+			string text2 = sign.ZDO.GetString(StatsWarehouseKey, string.Empty);
 			return (text.Equals(id, StringComparison.OrdinalIgnoreCase) || text2.Equals(id, StringComparison.OrdinalIgnoreCase)) && peers.Any(delegate(Peer peer)
 			{
-				//IL_0004: Unknown result type (might be due to invalid IL or missing references)
-				//IL_0014: Unknown result type (might be due to invalid IL or missing references)
-				//IL_0019: Unknown result type (might be due to invalid IL or missing references)
-				//IL_001e: Unknown result type (might be due to invalid IL or missing references)
 				if (peer != null)
 				{
-					Vector3 val = peer.RefPos - sign.ZDO.GetPosition();
-					return val.sqrMagnitude <= distance2;
+					Vector3 val3 = peer.RefPos - sign.ZDO.GetPosition();
+					return val3.sqrMagnitude <= distance2;
 				}
 				return false;
 			});
 		});
 	}
 
+	private void MarkStart()
+	{
+		_cycleDetail.Clear();
+		_markWatch = Stopwatch.StartNew();
+		_markLast = 0.0;
+	}
+
+	private void Mark(string name)
+	{
+		if (_markWatch != null)
+		{
+			double totalMilliseconds = _markWatch.Elapsed.TotalMilliseconds;
+			_cycleDetail.Append(name).Append('=').Append((totalMilliseconds - _markLast).ToString("0.0", CultureInfo.InvariantCulture))
+				.Append(' ');
+			_markLast = totalMilliseconds;
+		}
+	}
+
 	private void ProcessWarehouseCore(string id, IReadOnlyList<Peer> peers)
 	{
-		//IL_023a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_023f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0414: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0419: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0954: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0959: Unknown result type (might be due to invalid IL or missing references)
-		//IL_099a: Unknown result type (might be due to invalid IL or missing references)
+		_cycleDetail.Clear();
 		Stopwatch stopwatch = Stopwatch.StartNew();
+		if (!_germanNamesLoaded)
+		{
+			LoadGermanNames();
+		}
 		string language = LanguageForWarehouse(id);
 		List<ServersideQoLZDO> list = AllContainers();
 		_cycleContainers = list.Count;
 		_cycleSigns = _signs.Count;
 		float num = ConfigBase<WarehouseConfig>.Instance.MarkerDistance.Value * ConfigBase<WarehouseConfig>.Instance.MarkerDistance.Value;
+		MarkStart();
 		List<WarehouseNode> list2 = DiscoverWarehouseNodes(list, num);
+		Mark("nodes");
 		ValidateWarehouseNodes(list2, num);
-		ReconcileLegacyWarehouseSigns(list2);
+		Mark("validate");
 		_knownNodes.Clear();
 		foreach (WarehouseNode item2 in list2.Where((WarehouseNode x) => x.Valid))
 		{
@@ -1257,32 +1381,36 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		UpdateInputHelpSigns(list2);
 		UpdateUnpairedInputSigns(list2);
 		_cycleTopologyMs = stopwatch.ElapsedMilliseconds;
+		Mark("helpSigns");
 		WarehouseNode localNode = list2.FirstOrDefault((WarehouseNode x) => x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 		if (localNode == null || !localNode.Valid)
 		{
+			ReportSkippedCycle(id, (localNode == null) ? ("no IN marker with a reachable input chest (network: " + string.Join(", ", list2.Select((WarehouseNode n) => n.Id + (n.Valid ? "" : "!"))) + ")") : ("warehouse locked (" + localNode.Error + ")"), (localNode == null) ? "board.no_input" : "board.locked", language);
 			return;
 		}
 		_localStorage = new HashSet<ServersideQoLZDO>(list.Where((ServersideQoLZDO x) => Distance2(x, localNode.Input) <= localNode.Radius * localNode.Radius));
 		float signRadius = localNode.Radius + Math.Max(ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value, ConfigBase<WarehouseConfig>.Instance.MarkerDistance.Value) + 2f;
 		_storageSigns = _signs.Where((ServersideQoLZDO sign) => Distance2(sign, localNode.Input) <= signRadius * signRadius || LinkedInside(sign, localNode)).ToList();
+		Mark("localSets");
 		HashSet<ServersideQoLZDO> endpoints = new HashSet<ServersideQoLZDO>();
 		ServersideQoLZDO input = localNode.Input;
-		ServersideQoLZDO val = null;
+		ServersideQoLZDO outputZdo = null;
 		List<Request> list3 = new List<Request>();
 		List<ServersideQoLZDO> list4 = new List<ServersideQoLZDO>();
 		List<ServersideQoLZDO> list5 = new List<ServersideQoLZDO>();
 		List<ServersideQoLZDO> list6 = new List<ServersideQoLZDO>();
+		List<FillOrder> list7 = new List<FillOrder>();
 		float num2 = ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value;
 		ServersideQoLZDO.ZDOVars vars;
 		foreach (ServersideQoLZDO sign in _signs)
 		{
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
-			string text = sign.ZDO.GetString("ModerWarehouse.RequestWarehouse", string.Empty);
-			string text2 = sign.ZDO.GetString("ModerWarehouse.InfoWarehouse", string.Empty);
-			string text3 = sign.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty);
-			string text4 = sign.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty);
+			string text = sign.ZDO.GetString(RequestWarehouseKey, string.Empty);
+			string text2 = sign.ZDO.GetString(InfoWarehouseKey, string.Empty);
+			string text3 = sign.ZDO.GetString(BoardWarehouseKey, string.Empty);
+			string text4 = sign.ZDO.GetString(StatsWarehouseKey, string.Empty);
 			bool flag = !match.Success && text.Equals(id, StringComparison.OrdinalIgnoreCase);
 			bool flag2 = !match.Success && text2.Equals(id, StringComparison.OrdinalIgnoreCase);
 			bool flag3 = !match.Success && text3.Equals(id, StringComparison.OrdinalIgnoreCase);
@@ -1320,119 +1448,158 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				list6.Add(sign);
 				continue;
 			}
-			ServersideQoLZDO val2 = NearestContainer(sign, list, num);
-			if (val2 != null)
+			ServersideQoLZDO val = NearestContainer(sign, list, num);
+			if (val != null)
 			{
-				endpoints.Add(val2);
-				if (text5 == "IN" && val2 == localNode.Input)
+				endpoints.Add(val);
+				if (text5 == "IN" && val == localNode.Input)
 				{
-					input = val2;
+					input = val;
 				}
 				if (text5 == "OUT")
 				{
-					val = val2;
+					outputZdo = val;
+				}
+				if (text5 == "FILL")
+				{
+					list7.Add(new FillOrder(sign, val, match.Groups["payload"].Value));
 				}
 			}
 		}
+		_panelPositions[id] = (from sign in list5.Concat(list6)
+			select sign.ZDO.GetPosition()).ToArray();
+		Mark("signLoop");
 		if (input == null)
 		{
+			ReportSkippedCycle(id, "input chest not resolved", "board.no_input", language);
 			return;
 		}
 		ContainerRegistryProcessor registry = Processor.Instance<ContainerRegistryProcessor>();
 		ContainerState state = registry.GetState(input);
 		if (state == null)
 		{
+			ReportSkippedCycle(id, "input chest has no container state", "board.input_unavailable", language);
 			return;
 		}
-		IInventory val3 = InventoryFor(registry, input);
-		if (val3 == null)
+		IInventory val2 = InventoryFor(registry, input);
+		if (val2 == null)
 		{
+			ReportSkippedCycle(id, "input chest inventory unavailable", "board.input_unavailable", language);
 			return;
 		}
+		ReportSkippedCycle(id, null, null, language);
 		float radius2 = localNode.Radius * localNode.Radius;
+		Mark("source");
 		HashSet<ServersideQoLZDO> ignored = DiscoverIgnored(list, num);
-		RefreshAutomaticLabels(list, num2, registry, language);
-		Dictionary<ServersideQoLZDO, string> labels = DiscoverLabels(list, num2);
-		Dictionary<ServersideQoLZDO, ServersideQoLZDO> dictionary = DiscoverBlankSigns(list, num2);
-		if (RemoveSupersededGeneratedLabels(dictionary, list, num2))
-		{
-			labels = DiscoverLabels(list, num2);
-			dictionary = DiscoverBlankSigns(list, num2);
-		}
-		RepairGeneratedLabelPlacement(list, num2);
+		Mark("ignored");
+		RefreshAutomaticLabels(list, num2, registry, language, id);
+		Mark("refreshLabels");
+		Dictionary<ServersideQoLZDO, string> labels = DiscoverLabels(list, num2, null, rememberItemTokens: true, id);
+		Mark("discoverLabels");
+		Dictionary<ServersideQoLZDO, ServersideQoLZDO> dictionary = DiscoverBlankSigns(list, num2, null, id);
+		Mark("blankSigns");
 		HashSet<ServersideQoLZDO> optedIn = new HashSet<ServersideQoLZDO>(labels.Keys);
 		optedIn.UnionWith(dictionary.Keys);
-		List<ServersideQoLZDO> list7 = (from x in list
-			where optedIn.Contains(x) && CanManageContainer(x, endpoints, ignored, optedIn.Contains(x))
-			where Distance2(x, input) <= radius2
-			where ContainsOnlyWarehouseItems(InventoryFor(registry, x))
+		if (DeferForInventoryWarmUp(id, list.Where((ServersideQoLZDO x) => optedIn.Contains(x) && Distance2(x, input) <= radius2)))
+		{
+			return;
+		}
+		List<ServersideQoLZDO> quarantined = new List<ServersideQoLZDO>();
+		List<ServersideQoLZDO> list8 = (from x in (from x in list
+				where optedIn.Contains(x) && WarehouseContainerPolicy.CanManage(endpoints.Contains(x), ignored.Contains(x), IsPrivateContainer(x), inUse: false, hasStorageSign: true)
+				where Distance2(x, input) <= radius2
+				select x).Where(delegate(ServersideQoLZDO x)
+			{
+				if (ContainsOnlyWarehouseItems(InventoryFor(registry, x)))
+				{
+					return true;
+				}
+				if (InventoryFor(registry, x) != null)
+				{
+					quarantined.Add(x);
+				}
+				return false;
+			})
 			orderby Distance2(x, input)
 			select x).ToList();
-		int num3 = SanitizeForbiddenItems(list7, registry, list, num2);
+		List<ServersideQoLZDO> list9 = list8.Where(delegate(ServersideQoLZDO x)
+		{
+			ServersideQoLZDO.ZDOVars vars2 = x.Vars;
+			return !vars2.GetInUse(false);
+		}).ToList();
+		ReportQuarantinedStorage(id, quarantined, registry);
+		Mark("storesFilter");
+		_cycleStores = list9.Count;
+		int moves = Math.Max(1, ConfigBase<WarehouseConfig>.Instance.MaxMoves.Value);
+		int num3 = CorrectMisfiledItems(id, list9, labels, registry, ref moves);
 		if (num3 > 0)
 		{
-			this.Logger.LogWarning((object)($"Warehouse '{id}' janitor purged {num3} forbidden internal item(s) " + "from signed managed storage; IN was left untouched."));
+			this.Logger.LogInfo((object)$"Warehouse '{id}' janitor refiled {num3} valid misplaced item(s) in total.");
 		}
-		_cycleStores = list7.Count;
-		int moves = Math.Max(1, ConfigBase<WarehouseConfig>.Instance.MaxMoves.Value);
-		int num4 = CorrectMisfiledItems(id, list7, labels, registry, ref moves);
-		if (num4 > 0)
+		Mark("janitor");
+		ServersideQoLZDO val3 = ((IEnumerable<ServersideQoLZDO>)list6).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetInt(StatsCellKey, -1) == 12));
+		StatsCacheEntry statsCacheEntry = ((val3 == null) ? null : TakeStatsHistory(val3));
+		WarehouseStatsHistory warehouseStatsHistory = statsCacheEntry?.History;
+		if (warehouseStatsHistory != null)
 		{
-			this.Logger.LogInfo((object)$"Warehouse '{id}' janitor refiled {num4} valid misplaced item(s) in total.");
+			SnapshotStatistics(warehouseStatsHistory, list8, registry);
 		}
-		ServersideQoLZDO val4 = ((IEnumerable<ServersideQoLZDO>)list6).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetInt("ModerWarehouse.StatsCell", -1) == 12));
-		WarehouseStatsHistory warehouseStatsHistory = ((val4 == null) ? null : WarehouseStatsHistory.Parse(val4.ZDO.GetString("ModerWarehouse.StatsHistory", string.Empty)));
-		warehouseStatsHistory?.SetSnapshot(list7, delegate(ServersideQoLZDO store)
-		{
-			IInventory val6 = InventoryFor(registry, store);
-			return (val6 != null) ? val6.Items : null;
-		});
-		Dictionary<string, int> dictionary2 = (from val6 in list7.SelectMany(delegate(ServersideQoLZDO store)
+		Mark("statsLoad");
+		Dictionary<string, int> dictionary2 = (from val5 in list8.SelectMany(delegate(ServersideQoLZDO store)
 			{
-				IInventory val6 = InventoryFor(registry, store);
-				IEnumerable<ItemData> enumerable = ((val6 != null) ? val6.Items : null);
+				IInventory obj = InventoryFor(registry, store);
+				IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
 				return enumerable ?? Enumerable.Empty<ItemData>();
 			})
-			where val6 != null && val6.m_stack > 0 && val6.m_shared != null
-			group val6 by val6.m_shared.m_name).ToDictionary<IGrouping<string, ItemData>, string, int>((IGrouping<string, ItemData> group) => group.Key, (IGrouping<string, ItemData> group) => group.Sum((ItemData val6) => val6.m_stack), StringComparer.Ordinal);
+			where val5 != null && val5.m_stack > 0 && val5.m_shared != null
+			group val5 by val5.m_shared.m_name).ToDictionary<IGrouping<string, ItemData>, string, int>((IGrouping<string, ItemData> group) => group.Key, (IGrouping<string, ItemData> group) => group.Sum((ItemData val5) => val5.m_stack), StringComparer.Ordinal);
 		if (!_warehouseStockSnapshots.TryGetValue(id, out var value) || !StockEqual(value, dictionary2))
 		{
 			_warehouseStockSnapshots[id] = dictionary2;
 			_warehouseStockTimes[id] = WarehouseClock.UtcNow;
 			SaveStockCache();
 		}
+		Mark("stockSnapshot");
 		_cycleClassifyMs = stopwatch.ElapsedMilliseconds - _cycleTopologyMs;
-		WhitenWarehouseLabels(list7.Concat(endpoints).Concat(ignored).Distinct()
+		WhitenWarehouseLabels(list8.Concat(endpoints).Concat(ignored).Distinct()
 			.ToList(), list, num2);
-		LabelHomogeneousStores(list7, labels, dictionary, registry, language);
-		AdoptContainerSigns(list7, list, num2);
-		WriteWarehouseInfo(id, language, list4, list7, labels, registry);
-		WriteShoppingLists(id, language, list3.Select((Request x) => x.Sign), list7, registry);
-		WriteWarehouseBoard(id, language, list5, list7, registry, peers, list2, list, num);
+		Mark("whiten");
+		LabelHomogeneousStores(id, list9, labels, dictionary, registry, language);
+		AdoptContainerSigns(list9, list, num2);
+		Mark("autoLabel");
+		WriteWarehouseInfo(id, language, list4, list8, labels, registry);
+		WriteShoppingLists(language, list3.Select((Request x) => x.Sign), list8, registry);
+		Mark("infoShopping");
+		WriteWarehouseBoard(id, language, list5, list8, registry, peers, list2, list, num);
+		Mark("board");
 		_cycleDisplayMs = stopwatch.ElapsedMilliseconds - _cycleTopologyMs - _cycleClassifyMs;
-		int num5 = 0;
+		int num4 = 0;
 		HashSet<ServersideQoLZDO> hashSet = new HashSet<ServersideQoLZDO>();
 		Dictionary<string, int> dictionary3 = new Dictionary<string, int>(StringComparer.CurrentCultureIgnoreCase);
-		bool flag5 = val3.Items.Any((ItemData val6) => IsWarehouseItem(val6) && val6.m_stack > 0);
+		bool flag5 = val2.Items.Any((ItemData val5) => IsWarehouseItem(val5) && val5.m_stack > 0);
 		vars = input.Vars;
-		bool flag6 = vars.GetInUse(false);
-		if (flag6 && TryReleaseStaleInputLock(id, input, state, peers))
+		bool inUse = vars.GetInUse(false);
+		if (inUse && TryReleaseStaleInputLock(id, input, state, peers))
 		{
-			flag6 = false;
+			inUse = false;
 		}
-		else if (!flag6)
+		else if (!inUse)
 		{
 			_inputInUseSince.Remove(input.ZDO.m_uid);
 		}
-		bool flag7 = state.ZDO.IsOwnerOrUnassigned();
-		bool flag8 = flag5 && !flag6 && Own(state);
+		bool flag6 = state.ZDO.IsOwnerOrUnassigned();
+		bool flag7 = flag5 && !inUse && Own(state);
+		int num5 = 0;
 		int num6 = 0;
 		int num7 = 0;
 		int num8 = 0;
-		int num9 = 0;
-		if (flag5 && !flag6 && flag8)
+		List<ServersideQoLZDO> second = list9.Where((ServersideQoLZDO x) => IsMiscChest(x, labels)).ToList();
+		Dictionary<string, int> dictionary4 = new Dictionary<string, int>(StringComparer.CurrentCultureIgnoreCase);
+		bool flag8 = false;
+		if (flag5 && !inUse && flag7)
 		{
-			foreach (ItemData item in val3.Items.ToList())
+			flag8 = true;
+			foreach (ItemData item in val2.Items.ToList())
 			{
 				if (moves <= 0 || item == null || item.m_stack <= 0)
 				{
@@ -1442,113 +1609,100 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				{
 					continue;
 				}
-				int num10 = item.m_stack;
-				string value4;
-				foreach (ServersideQoLZDO item3 in list7.Where((ServersideQoLZDO x) => labels.TryGetValue(x, out value4) ? LabelMatches(x, value4, item, registry) : IsSingleItemType(InventoryFor(registry, x), item)).OrderByDescending(delegate(ServersideQoLZDO x)
+				int num9 = item.m_stack;
+				string value5;
+				foreach (ServersideQoLZDO item3 in (from x in list9
+					where (!labels.TryGetValue(x, out value5)) ? IsSingleItemType(InventoryFor(registry, x), item) : LabelMatches(x, value5, item, registry)
+					orderby FillPriority(x, id, item.m_shared.m_name), (!HasItem(InventoryFor(registry, x), item)) ? ((labels.TryGetValue(x, out value5) && LabelMatches(x, value5, item, registry)) ? 1 : 0) : 2 descending
+					select x).Concat(second))
 				{
-					if (HasItem(InventoryFor(registry, x), item))
-					{
-						return 2;
-					}
-					return (labels.TryGetValue(x, out value4) && LabelMatches(x, value4, item, registry)) ? 1 : 0;
-				}))
-				{
-					if (moves <= 0 || num10 <= 0)
+					if (moves <= 0 || num9 <= 0)
 					{
 						break;
 					}
-					num6++;
+					num5++;
 					ContainerState state2 = registry.GetState(item3);
 					if (state2 == null)
 					{
-						num7++;
+						num6++;
 						continue;
 					}
 					if (!Own(state2))
 					{
-						num8++;
+						num7++;
 						continue;
 					}
-					IInventory val5 = InventoryFor(registry, item3);
-					bool flag9 = !labels.ContainsKey(item3) && IsSingleItemType(val5, item);
-					int num11 = Move(val3, val5, item, num10);
-					if (num11 <= 0)
+					IInventory val4 = InventoryFor(registry, item3);
+					bool flag9 = !labels.ContainsKey(item3) && IsSingleItemType(val4, item);
+					int num10 = Move(val2, val4, item, num9);
+					if (num10 <= 0)
 					{
-						num9++;
+						num8++;
 					}
-					if (num11 <= 0)
+					if (num10 <= 0)
 					{
 						continue;
 					}
 					string key = LocalizedItemName(item, language);
-					dictionary3[key] = (dictionary3.TryGetValue(key, out var value2) ? (value2 + num11) : num11);
-					num5 += num11;
-					warehouseStatsHistory?.AddInput(item.m_shared.m_name, num11);
-					num10 -= num11;
+					dictionary3[key] = (dictionary3.TryGetValue(key, out var value2) ? (value2 + num10) : num10);
+					num4 += num10;
+					warehouseStatsHistory?.AddInput(item.m_shared.m_name, num10);
+					num9 -= num10;
 					moves--;
 					hashSet.Add(item3);
 					if (flag9 && ConfigBase<WarehouseConfig>.Instance.AutoCreateLabels.Value)
 					{
-						string value3 = CreateAutomaticLabel(item3, item, dictionary, language);
+						string value3 = CreateAutomaticLabel(id, item3, item, dictionary, language);
 						if (!string.IsNullOrEmpty(value3))
 						{
 							labels[item3] = value3;
 						}
 					}
 				}
+				if (num9 > 0 && moves > 0)
+				{
+					string key2 = LocalizedItemName(item, language);
+					dictionary4[key2] = (dictionary4.TryGetValue(key2, out var value4) ? (value4 + num9) : num9);
+				}
 			}
 		}
-		if (val3.Items.Any((ItemData val6) => val6 != null && val6.m_stack > 0) && num5 == 0 && ShouldLogTransferDiagnostic(id))
+		if (flag8 || !flag5)
 		{
-			string text7 = string.Join(", ", from val6 in val3.Items
-				where val6 != null && val6.m_stack > 0
-				select $"{ItemName(val6)} x{val6.m_stack}" + string.Format(" [shared='{0}', cheated={1}, ", val6.m_shared?.m_name ?? "<null>", val6.m_cheated) + "type='" + (val6.m_shared?.m_itemType.ToString() ?? "<null>") + "']");
-			int num12 = val3.Items.Count((ItemData val6) => val6 != null && val6.m_stack > 0 && !IsWarehouseItem(val6));
-			this.Logger.LogWarning((object)("Warehouse '" + id + "': transfer diagnostic; input=[" + text7 + "], " + $"warehouseItems={flag5}, rejectedItemStacks={num12}, " + $"INInUse={flag6}, sourceOwnerBefore={flag7}, " + $"sourceOwnershipGranted={flag8}, stores={list7.Count}, " + $"matchingTargets={num6}, missingTargetStates={num7}, " + $"targetOwnershipBlocked={num8}, moveReturnedZero={num9}."));
+			UpdateNoSpace(id, dictionary4);
 		}
-		if (num5 > 0)
+		if (val2.Items.Any((ItemData val5) => val5 != null && val5.m_stack > 0) && num4 == 0 && ShouldLogTransferDiagnostic(id))
+		{
+			string text7 = string.Join(", ", from val5 in val2.Items
+				where val5 != null && val5.m_stack > 0
+				select $"{ItemName(val5)} x{val5.m_stack}" + string.Format(" [shared='{0}', cheated={1}, ", val5.m_shared?.m_name ?? "<null>", val5.m_cheated) + "type='" + (val5.m_shared?.m_itemType.ToString() ?? "<null>") + "']");
+			int num11 = val2.Items.Count((ItemData val5) => val5 != null && val5.m_stack > 0 && !IsWarehouseItem(val5));
+			this.Logger.LogWarning((object)("Warehouse '" + id + "': transfer diagnostic; input=[" + text7 + "], " + $"warehouseItems={flag5}, rejectedItemStacks={num11}, " + $"INInUse={inUse}, sourceOwnerBefore={flag6}, " + $"sourceOwnershipGranted={flag7}, stores={list9.Count}, " + $"matchingTargets={num5}, missingTargetStates={num6}, " + $"targetOwnershipBlocked={num7}, moveReturnedZero={num8}."));
+		}
+		if (num4 > 0)
 		{
 			_deliveryNotices[id] = new DeliveryNotice(dictionary3, WarehouseClock.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.DeliveryNoticeSeconds.Value)));
-			this.Logger.LogInfo((object)($"Warehouse '{id}': stored {num5} item(s) into " + $"{hashSet.Count} chest(s); {list7.Count} candidate chest(s) scanned."));
+			this.Logger.LogInfo((object)($"Warehouse '{id}': stored {num4} item(s) into " + $"{hashSet.Count} chest(s); {list9.Count} candidate chest(s) scanned."));
 		}
-		if (val != null)
+		foreach (Request item4 in list3)
 		{
-			foreach (Request item4 in list3)
-			{
-				ProcessRequest(id, language, item4, val, list7, registry, warehouseStatsHistory, ref moves, list2, list, num);
-			}
+			ProcessRequest(id, language, item4, outputZdo, list8, registry, warehouseStatsHistory, ref moves, num);
+		}
+		RefillChests(id, language, list7, input, localNode.Radius, list9, registry, warehouseStatsHistory, ref moves);
+		if (!val2.Items.Any((ItemData val5) => val5 != null && val5.m_stack > 0 && IsWarehouseItem(val5)))
+		{
+			CompactStorage(id, list9, labels, registry, list, num2, ref moves);
 		}
 		if (warehouseStatsHistory != null)
 		{
-			warehouseStatsHistory.SetSnapshot(list7, delegate(ServersideQoLZDO store)
-			{
-				IInventory val6 = InventoryFor(registry, store);
-				return (val6 != null) ? val6.Items : null;
-			});
-			if (warehouseStatsHistory.Changed)
-			{
-				val4.ZDO.Set("ModerWarehouse.StatsHistory", warehouseStatsHistory.Serialize());
-			}
-			WriteStatisticsBoard(id, language, list6, warehouseStatsHistory, list7, registry, peers, list2, list, num);
+			SnapshotStatistics(warehouseStatsHistory, list8, registry);
+			StoreStatsHistory(val3, statsCacheEntry);
+			WriteStatisticsBoard(id, language, list6, warehouseStatsHistory, list8, registry, peers, list2, list, num);
 		}
 		_cycleTransferMs = stopwatch.ElapsedMilliseconds - _cycleTopologyMs - _cycleClassifyMs - _cycleDisplayMs;
 	}
 
 	private bool TryReleaseStaleInputLock(string id, ServersideQoLZDO input, ContainerState state, IReadOnlyList<Peer> peers)
 	{
-		//IL_0026: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0085: Unknown result type (might be due to invalid IL or missing references)
-		//IL_008a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0048: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00da: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00df: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e1: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0150: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0155: Unknown result type (might be due to invalid IL or missing references)
-		//IL_016f: Unknown result type (might be due to invalid IL or missing references)
 		float value = ConfigBase<WarehouseConfig>.Instance.StaleInputLockSeconds.Value;
 		if (value <= 0f)
 		{
@@ -1596,6 +1750,433 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return true;
 	}
 
+	private void RefillChests(string id, string language, List<FillOrder> fills, ServersideQoLZDO input, float radius, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves)
+	{
+		foreach (FillOrder fill in fills)
+		{
+			if (moves <= 0)
+			{
+				break;
+			}
+			if (Distance2(fill.Chest, input) > radius * radius)
+			{
+				continue;
+			}
+			ServersideQoLZDO.ZDOVars vars = fill.Chest.Vars;
+			if (vars.GetInUse(false) || !TryParseTargets(PlainText(fill.Payload), out var targets))
+			{
+				continue;
+			}
+			ContainerState state = registry.GetState(fill.Chest);
+			IInventory val = InventoryFor(registry, fill.Chest);
+			if (state == null || val == null)
+			{
+				continue;
+			}
+			List<ItemData> items = (from item in stores.SelectMany(delegate(ServersideQoLZDO store)
+				{
+					IInventory obj = InventoryFor(registry, store);
+					IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+					return enumerable ?? Enumerable.Empty<ItemData>();
+				})
+				where item != null && item.m_stack > 0 && item.m_shared != null
+				select item).ToList();
+			foreach (KeyValuePair<string, int> item in targets)
+			{
+				if (moves <= 0)
+				{
+					return;
+				}
+				string token = ChooseRequestToken(items, item.Key) ?? ChooseRequestToken(val.Items, item.Key);
+				if (token == null)
+				{
+					continue;
+				}
+				int num = val.Items.Where((ItemData item) => item != null && item.m_shared?.m_name == token).Sum((ItemData item) => item.m_stack);
+				int num2 = item.Value - num;
+				if (num2 <= 0)
+				{
+					continue;
+				}
+				if (!Own(state))
+				{
+					break;
+				}
+				int num3 = 0;
+				foreach (ServersideQoLZDO store in stores)
+				{
+					if (moves <= 0 || num2 <= 0)
+					{
+						break;
+					}
+					vars = store.Vars;
+					if (vars.GetInUse(false))
+					{
+						continue;
+					}
+					ContainerState state2 = registry.GetState(store);
+					IInventory val2 = InventoryFor(registry, store);
+					if (state2 == null || val2 == null)
+					{
+						continue;
+					}
+					List<ItemData> list = val2.Items.Where((ItemData item) => item != null && item.m_stack > 0 && item.m_shared?.m_name == token).ToList();
+					if (list.Count == 0 || !Own(state2))
+					{
+						continue;
+					}
+					foreach (ItemData item2 in list)
+					{
+						if (moves <= 0 || num2 <= 0)
+						{
+							break;
+						}
+						int num4 = Move(val2, val, item2, num2);
+						if (num4 > 0)
+						{
+							num3 += num4;
+							num2 -= num4;
+							moves--;
+							stats?.AddOutput(token, num4);
+						}
+					}
+				}
+				if (num3 > 0)
+				{
+					this.Logger.LogInfo((object)($"Warehouse '{id}': refilled {num3} x '{LocalizedTokenName(token, language)}' " + $"into FILL chest ({item.Value} wanted)."));
+				}
+			}
+		}
+	}
+
+	private void CompactStorage(string id, List<ServersideQoLZDO> stores, Dictionary<ServersideQoLZDO, string> labels, ContainerRegistryProcessor registry, List<ServersideQoLZDO> containers, float labelRange2, ref int moves)
+	{
+		DateTime utcNow = WarehouseClock.UtcNow;
+		if (moves <= 0 || (_compactAt.TryGetValue(id, out var value) && utcNow < value))
+		{
+			return;
+		}
+		_compactAt[id] = utcNow.AddSeconds(60.0);
+		Dictionary<string, List<(ServersideQoLZDO Chest, int Amount, ItemData Sample)>> dictionary = new Dictionary<string, List<(ServersideQoLZDO Chest, int Amount, ItemData Sample)>>(StringComparer.Ordinal);
+		foreach (ServersideQoLZDO store in stores)
+		{
+			IInventory obj = InventoryFor(registry, store);
+			IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+			List<ItemData> list = (enumerable ?? Enumerable.Empty<ItemData>()).Where((ItemData item) => item != null && item.m_stack > 0 && item.m_shared != null).ToList();
+			if (list.Count == 0)
+			{
+				continue;
+			}
+			string token = list[0].m_shared.m_name;
+			if (list.Any((ItemData item) => item.m_shared.m_name != token))
+			{
+				continue;
+			}
+			bool num;
+			if (!_labelItemTokens.TryGetValue(store, out var value2))
+			{
+				if (!labels.TryGetValue(store, out var value3))
+				{
+					goto IL_0178;
+				}
+				if (TryLabelCategory(value3, out var _))
+				{
+					continue;
+				}
+				num = LabelMatches(store, value3, list[0], registry);
+			}
+			else
+			{
+				num = value2 == token;
+			}
+			if (!num)
+			{
+				continue;
+			}
+			goto IL_0178;
+			IL_0178:
+			if (!dictionary.TryGetValue(token, out var value4))
+			{
+				value4 = (dictionary[token] = new List<(ServersideQoLZDO Chest, int Amount, ItemData Sample)>());
+			}
+			value4.Add((store, list.Sum((ItemData item) => item.m_stack), list[0]));
+		}
+		foreach (KeyValuePair<string, List<(ServersideQoLZDO Chest, int Amount, ItemData Sample)>> pair in dictionary)
+		{
+			if (pair.Value.Count < 2)
+			{
+				continue;
+			}
+			(ServersideQoLZDO Chest, int Amount, ItemData Sample) source = (from x in pair.Value
+				orderby (FillPriority(x.Chest, id, pair.Key) == int.MaxValue) ? 1 : FillPriority(x.Chest, id, pair.Key) descending, x.Amount
+				select x).First();
+			List<(ServersideQoLZDO Chest, int Amount, ItemData Sample)> list3 = (from x in pair.Value
+				where x.Chest != source.Chest
+				orderby FillPriority(x.Chest, id, pair.Key), x.Amount descending
+				select x).ToList();
+			if (list3.Sum<(ServersideQoLZDO Chest, int Amount, ItemData Sample)>(((ServersideQoLZDO Chest, int Amount, ItemData Sample) x) => FreeCapacity(InventoryFor(registry, x.Chest), source.Sample)) < source.Amount)
+			{
+				continue;
+			}
+			ContainerState state = registry.GetState(source.Chest);
+			IInventory val = InventoryFor(registry, source.Chest);
+			if (state == null || val == null || !Own(state))
+			{
+				continue;
+			}
+			int num2 = 0;
+			foreach (var item in list3)
+			{
+				ContainerState state2 = registry.GetState(item.Item1);
+				if (state2 == null || !Own(state2))
+				{
+					continue;
+				}
+				IInventory destination = InventoryFor(registry, item.Item1);
+				foreach (ItemData item2 in val.Items.Where((ItemData x) => x != null && x.m_stack > 0).ToList())
+				{
+					if (moves <= 0)
+					{
+						break;
+					}
+					int num3 = Move(val, destination, item2, item2.m_stack);
+					if (num3 > 0)
+					{
+						num2 += num3;
+						moves--;
+					}
+				}
+			}
+			if (num2 != 0)
+			{
+				bool flag = !val.Items.Any((ItemData x) => x != null && x.m_stack > 0);
+				string text = LocalizedTokenName(pair.Key, LanguageForWarehouse(id));
+				this.Logger.LogInfo((object)($"Warehouse '{id}': compacted {num2} x '{text}' into {list3.Count} chest(s)" + (flag ? "; one chest is free again." : ".")));
+				if (flag)
+				{
+					ReleaseAutomaticLabel(source.Chest, pair.Key, containers, labelRange2);
+				}
+				break;
+			}
+		}
+	}
+
+	private static int FreeCapacity(IInventory inventory, ItemData item)
+	{
+		if (inventory == null || item?.m_shared == null)
+		{
+			return 0;
+		}
+		int max = Math.Max(1, item.m_shared.m_maxStackSize);
+		int num = inventory.Items.Where((ItemData x) => CanStack(x, item)).Sum((ItemData x) => Math.Max(0, max - x.m_stack));
+		int val = inventory.Inventory.GetWidth() * inventory.Inventory.GetHeight() - inventory.Items.Count;
+		return num + Math.Max(0, val) * max;
+	}
+
+	private void ReleaseAutomaticLabel(ServersideQoLZDO chest, string token, List<ServersideQoLZDO> containers, float labelRange2)
+	{
+		foreach (ServersideQoLZDO item in StorageSigns.Where((ServersideQoLZDO sign) => sign.ZDO.GetBool(AutoLabelManagedKey, false) && sign.ZDO.GetString(AutoLabelItemKey, string.Empty) == token && sign.ZDO.GetInt(AutoLabelPriorityKey, 0) == 0 && LinkedOrNearestContainer(sign, containers, labelRange2) == chest).ToList())
+		{
+			if (!item.IsOwnerOrUnassigned())
+			{
+				item.ClaimOwnership();
+			}
+			item.ZDO.Set(AutoLabelItemKey, string.Empty);
+			item.ZDO.Set(AutoLabelPriorityKey, 0, false);
+			ServersideQoLZDO.ZDOVars vars = item.Vars;
+			vars.SetText("<color=white>...");
+		}
+	}
+
+	private void UpdateNoSpace(string id, Dictionary<string, int> current)
+	{
+		_noSpace.TryGetValue(id, out var previous);
+		if (current.Count == 0)
+		{
+			if (previous != null)
+			{
+				this.Logger.LogInfo((object)("Warehouse '" + id + "': all input items found room again."));
+			}
+			_noSpace.Remove(id);
+			_noSpaceNotices.Remove(id);
+			return;
+		}
+		int value;
+		bool num = previous == null || current.Any((KeyValuePair<string, int> pair) => !previous.TryGetValue(pair.Key, out value) || pair.Value > value);
+		_noSpace[id] = current;
+		if (num)
+		{
+			_noSpaceNotices[id] = new DeliveryNotice(current, WarehouseClock.UtcNow.AddSeconds(Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.DeliveryNoticeSeconds.Value)));
+			this.Logger.LogWarning((object)("Warehouse '" + id + "': no room for " + string.Join(", ", current.Select((KeyValuePair<string, int> x) => x.Key + " x" + x.Value)) + "; items stay in IN. Add storage chests or a SONSTIGES chest."));
+		}
+	}
+
+	private StatsCacheEntry TakeStatsHistory(ServersideQoLZDO anchor)
+	{
+		string text = anchor.ZDO.GetString(StatsHistoryKey, string.Empty);
+		if (_statsCache.TryGetValue(anchor, out var value) && value.Raw == text)
+		{
+			_statsCache.Remove(anchor);
+			return value;
+		}
+		_statsCache.Remove(anchor);
+		return new StatsCacheEntry
+		{
+			Raw = text,
+			History = WarehouseStatsHistory.Parse(text),
+			WrittenAt = DateTime.MinValue
+		};
+	}
+
+	private void StoreStatsHistory(ServersideQoLZDO anchor, StatsCacheEntry entry)
+	{
+		DateTime utcNow = WarehouseClock.UtcNow;
+		if (entry.History.Changed && (utcNow - entry.WrittenAt).TotalSeconds >= 60.0)
+		{
+			string text = entry.History.Serialize();
+			if (!anchor.IsOwnerOrUnassigned())
+			{
+				anchor.ClaimOwnership();
+			}
+			anchor.ZDO.Set(StatsHistoryKey, text);
+			entry.Raw = text;
+			entry.WrittenAt = utcNow;
+		}
+		_statsCache[anchor] = entry;
+	}
+
+	private void OnWorldSaveStarted()
+	{
+		try
+		{
+			FlushStatsHistories();
+		}
+		catch (Exception ex)
+		{
+			this.Logger.LogWarning((object)("Could not flush warehouse statistics before world save: " + ex.Message));
+		}
+		try
+		{
+			ExportStatisticsCsv();
+		}
+		catch (Exception ex2)
+		{
+			this.Logger.LogWarning((object)("Could not export warehouse statistics CSV: " + ex2.Message));
+		}
+	}
+
+	private void FlushStatsHistories()
+	{
+		foreach (KeyValuePair<ServersideQoLZDO, StatsCacheEntry> item in _statsCache.ToList())
+		{
+			if (item.Value.History.Changed && _signs.Contains(item.Key))
+			{
+				string text = item.Value.History.Serialize();
+				if (!item.Key.IsOwnerOrUnassigned())
+				{
+					item.Key.ClaimOwnership();
+				}
+				item.Key.ZDO.Set(StatsHistoryKey, text);
+				item.Value.Raw = text;
+				item.Value.WrittenAt = WarehouseClock.UtcNow;
+			}
+		}
+	}
+
+	private void ExportStatisticsCsv()
+	{
+		string path = DataDirectory;
+		Directory.CreateDirectory(path);
+		foreach (KeyValuePair<ServersideQoLZDO, StatsCacheEntry> item in _statsCache.ToList())
+		{
+			string text = item.Key.ZDO.GetString(StatsWarehouseKey, string.Empty).Trim();
+			if (text.Length != 0 && Regex.IsMatch(text, "^[A-Za-z0-9_-]+$"))
+			{
+				string language = LanguageForWarehouse(text);
+				string text2 = Path.Combine(path, "ModerWarehouse-statistics-" + text.ToUpperInvariant() + ".csv");
+				string text3 = text2 + ".tmp";
+				File.WriteAllText(text3, item.Value.History.ToCsv((string token) => LocalizedTokenName(token, language)), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+				if (File.Exists(text2))
+				{
+					File.Delete(text2);
+				}
+				File.Move(text3, text2);
+			}
+		}
+	}
+
+	private void SnapshotStatistics(WarehouseStatsHistory stats, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry)
+	{
+		Dictionary<string, int> dictionary = new Dictionary<string, int>(StringComparer.Ordinal);
+		int num = 0;
+		foreach (ServersideQoLZDO store in stores)
+		{
+			bool flag = false;
+			IInventory obj = InventoryFor(registry, store);
+			IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+			foreach (ItemData item in enumerable ?? Enumerable.Empty<ItemData>())
+			{
+				if (item != null && item.m_stack > 0 && item.m_shared != null)
+				{
+					flag = true;
+					string name = item.m_shared.m_name;
+					dictionary[name] = (dictionary.TryGetValue(name, out var value) ? (value + item.m_stack) : item.m_stack);
+				}
+			}
+			if (flag)
+			{
+				num++;
+			}
+		}
+		stats.SetSnapshot(dictionary, num, stores.Count);
+	}
+
+	private void ReportSkippedCycle(string id, string reason, string displayKey, string language)
+	{
+		if (reason != null)
+		{
+			ShowInactivePanels(id, displayKey, language);
+		}
+		_skipReported.TryGetValue(id, out var value);
+		if (!string.Equals(value, reason, StringComparison.Ordinal))
+		{
+			if (reason == null)
+			{
+				_skipReported.Remove(id);
+				this.Logger.LogInfo((object)("Warehouse '" + id + "': processing resumed."));
+				return;
+			}
+			_skipReported[id] = reason;
+			this.Logger.LogWarning((object)("Warehouse '" + id + "': cycle skipped, boards show INACTIVE: " + reason + "."));
+		}
+	}
+
+	private void ShowInactivePanels(string id, string displayKey, string language)
+	{
+		string text = "<color=#80ffff>" + WarehouseLocalization.Text(language, "board.warehouse") + "\n" + id.ToUpperInvariant();
+		string text2 = "<color=#ff6666>" + WarehouseLocalization.Text(language, "board.inactive");
+		string text3 = "<color=#ffb347>" + WarehouseLocalization.Text(language, displayKey ?? "board.no_input");
+		foreach (IGrouping<string, ServersideQoLZDO> item in from sign in _signs
+			where sign.ZDO.GetString(BoardWarehouseKey, string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase) || sign.ZDO.GetString(StatsWarehouseKey, string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase)
+			group sign by sign.ZDO.GetString(BoardGroupKey, string.Empty) + "|" + sign.ZDO.GetString(StatsGroupKey, string.Empty))
+		{
+			bool stats = item.Key.StartsWith("|", StringComparison.Ordinal);
+			Dictionary<int, ServersideQoLZDO> cells = (from sign in item
+				group sign by sign.ZDO.GetInt(stats ? StatsCellKey : BoardCellKey, -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
+			int num = (stats ? 16 : 16);
+			for (int num2 = 0; num2 < num; num2++)
+			{
+				WriteBoardCell(cells, num2, num2 switch
+				{
+					2 => text3, 
+					1 => text2, 
+					0 => text, 
+					_ => "<color=#8090a0>-", 
+				});
+			}
+		}
+	}
+
 	internal static float ParseInputRadius(string payload)
 	{
 		float num = Mathf.Max(10f, ConfigBase<WarehouseConfig>.Instance.Radius.Value);
@@ -1610,13 +2191,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private bool HasOtherInputWithId(ServersideQoLZDO inputSign, string id)
 	{
-		//IL_0020: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0025: Unknown result type (might be due to invalid IL or missing references)
 		foreach (ServersideQoLZDO sign in _signs)
 		{
 			if (sign != inputSign)
 			{
-				Regex marker = Marker;
+				WarehouseText.MatchCache marker = Marker;
 				ServersideQoLZDO.ZDOVars vars = sign.Vars;
 				Match match = marker.Match(PlainText(vars.GetText("")));
 				if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase) && match.Groups["id"].Value.Equals(id, StringComparison.OrdinalIgnoreCase))
@@ -1630,63 +2209,59 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void MigrateWarehouseSigns(ServersideQoLZDO inputSign, string oldId, string newId, float radius)
 	{
-		//IL_0315: Unknown result type (might be due to invalid IL or missing references)
-		//IL_031a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_040d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0412: Unknown result type (might be due to invalid IL or missing references)
 		int num = 0;
-		string text = inputSign.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty);
+		string text = inputSign.ZDO.GetString(HelpGroupKey, string.Empty);
 		HashSet<string> hashSet = new HashSet<string>(from sign in _signs
-			where sign.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase) || sign.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase)
-			select sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) into @group
+			where sign.ZDO.GetString(BoardWarehouseKey, string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase) || sign.ZDO.GetString(BoardWarehouseKey, string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase)
+			select sign.ZDO.GetString(BoardGroupKey, string.Empty) into @group
 			where !string.IsNullOrWhiteSpace(@group)
 			select @group, StringComparer.Ordinal);
 		HashSet<string> hashSet2 = new HashSet<string>(from sign in _signs
-			where sign.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase) || sign.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase)
-			select sign.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty) into @group
+			where sign.ZDO.GetString(StatsWarehouseKey, string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase) || sign.ZDO.GetString(StatsWarehouseKey, string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase)
+			select sign.ZDO.GetString(StatsGroupKey, string.Empty) into @group
 			where !string.IsNullOrWhiteSpace(@group)
 			select @group, StringComparer.Ordinal);
 		foreach (ServersideQoLZDO item in _signs.Where((ServersideQoLZDO sign) => sign != inputSign).ToList())
 		{
 			bool flag = false;
-			string[] array = new string[5] { "ModerWarehouse.RequestWarehouse", "ModerWarehouse.InfoWarehouse", "ModerWarehouse.BoardWarehouse", "ModerWarehouse.StatsWarehouse", "ModerWarehouse.HelpWarehouse" };
-			foreach (string text2 in array)
+			int[] array = new int[5] { RequestWarehouseKey, InfoWarehouseKey, BoardWarehouseKey, StatsWarehouseKey, HelpWarehouseKey };
+			foreach (int num3 in array)
 			{
-				if (item.ZDO.GetString(text2, string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase))
+				if (item.ZDO.GetString(num3, string.Empty).Equals(oldId, StringComparison.OrdinalIgnoreCase))
 				{
-					SetWarehouseKey(item, text2, newId);
+					SetWarehouseKey(item, num3, newId);
 					flag = true;
 				}
 			}
-			string text3 = item.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty);
-			if (!string.IsNullOrWhiteSpace(text3) && hashSet.Contains(text3) && !item.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
+			string text2 = item.ZDO.GetString(BoardGroupKey, string.Empty);
+			if (!string.IsNullOrWhiteSpace(text2) && hashSet.Contains(text2) && !item.ZDO.GetString(BoardWarehouseKey, string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
 			{
-				SetWarehouseKey(item, "ModerWarehouse.BoardWarehouse", newId);
+				SetWarehouseKey(item, BoardWarehouseKey, newId);
 				flag = true;
 			}
-			string text4 = item.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty);
-			if (!string.IsNullOrWhiteSpace(text4) && hashSet2.Contains(text4) && !item.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
+			string text3 = item.ZDO.GetString(StatsGroupKey, string.Empty);
+			if (!string.IsNullOrWhiteSpace(text3) && hashSet2.Contains(text3) && !item.ZDO.GetString(StatsWarehouseKey, string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
 			{
-				SetWarehouseKey(item, "ModerWarehouse.StatsWarehouse", newId);
+				SetWarehouseKey(item, StatsWarehouseKey, newId);
 				flag = true;
 			}
-			if (!string.IsNullOrWhiteSpace(text) && item.ZDO.GetBool("ModerWarehouse.HelpChild", false) && item.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty) == text && !item.ZDO.GetString("ModerWarehouse.HelpWarehouse", string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
+			if (!string.IsNullOrWhiteSpace(text) && item.ZDO.GetBool(HelpChildKey, false) && item.ZDO.GetString(HelpGroupKey, string.Empty) == text && !item.ZDO.GetString(HelpWarehouseKey, string.Empty).Equals(newId, StringComparison.OrdinalIgnoreCase))
 			{
-				SetWarehouseKey(item, "ModerWarehouse.HelpWarehouse", newId);
+				SetWarehouseKey(item, HelpWarehouseKey, newId);
 				flag = true;
 			}
 			ServersideQoLZDO.ZDOVars vars = item.Vars;
-			string input = PlainText(vars.GetText(""));
-			Match match = Marker.Match(input);
+			string value = PlainText(vars.GetText(""));
+			Match match = Marker.Match(value);
 			if (match.Success && !match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase) && match.Groups["id"].Value.Equals(oldId, StringComparison.OrdinalIgnoreCase))
 			{
-				string text5 = "[WH:" + newId + ":" + match.Groups["role"].Value.ToUpperInvariant() + "]" + match.Groups["payload"].Value;
+				string text4 = "[WH:" + newId + ":" + match.Groups["role"].Value.ToUpperInvariant() + "]" + match.Groups["payload"].Value;
 				if (!item.IsOwnerOrUnassigned())
 				{
 					item.ClaimOwnership();
 				}
 				vars = item.Vars;
-				vars.SetText(text5);
+				vars.SetText(text4);
 				flag = true;
 			}
 			if (flag)
@@ -1696,7 +2271,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		MigrateWarehouseRuntimeState(oldId, newId);
 		_warehousesDirty.Add(newId);
-		inputSign.ZDO.Set("ModerWarehouse.HelpWarehouse", newId);
+		inputSign.ZDO.Set(HelpWarehouseKey, newId);
 		this.Logger.LogInfo((object)$"Warehouse renamed '{oldId}' -> '{newId}': migrated {num} linked sign(s), including {hashSet.Count} stock-board and {hashSet2.Count} statistics-board group(s) by persistent group identity (legacy radius {radius:0.#} m); board state and statistics history retained.");
 	}
 
@@ -1729,10 +2304,14 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		_slowSampleAt.Remove(oldId);
 		_performanceWindows.Remove(oldId);
 		_knownNodes.Remove(oldId);
+		_panelPositions.Remove(oldId);
+		_acceptedWarehouseIds = _acceptedWarehouseIds.Select((string known) => (!known.Equals(oldId, StringComparison.OrdinalIgnoreCase)) ? known : newId).ToList();
+		_panelPositions.Remove(newId);
 		bool num2 = _warehousesDirty.Remove(oldId);
 		MoveRuntimeValue(_deliveryNotices, oldId, newId);
+		MoveRuntimeValue(_noSpace, oldId, newId);
+		MoveRuntimeValue(_noSpaceNotices, oldId, newId);
 		MoveRuntimeValue(_requestSearchNotices, oldId, newId);
-		MoveRuntimeValue(_boardAwakeUntil, oldId, newId);
 		if (num2)
 		{
 			_warehousesDirty.Add(newId);
@@ -1757,162 +2336,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private void ReconcileLegacyWarehouseSigns(List<WarehouseNode> network)
-	{
-		//IL_00bb: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00c0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0407: Unknown result type (might be due to invalid IL or missing references)
-		//IL_040c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0551: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0556: Unknown result type (might be due to invalid IL or missing references)
-		List<WarehouseNode> list = network.Where((WarehouseNode node) => node.Valid).ToList();
-		if (list.Count == 0)
-		{
-			return;
-		}
-		float maxDistance = 2500f;
-		HashSet<string> hashSet = new HashSet<string>(list.Select((WarehouseNode node) => node.Id), StringComparer.OrdinalIgnoreCase);
-		ServersideQoLZDO.ZDOVars vars;
-		foreach (ServersideQoLZDO sign in _signs)
-		{
-			string text = sign.ZDO.GetString("ModerWarehouse.InputWarehouse", string.Empty);
-			if (!string.IsNullOrWhiteSpace(text))
-			{
-				hashSet.Add(text.Trim());
-			}
-			Regex marker = Marker;
-			vars = sign.Vars;
-			Match match = marker.Match(PlainText(vars.GetText("")));
-			if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
-			{
-				hashSet.Add(match.Groups["id"].Value.Trim());
-			}
-		}
-		int num = 0;
-		foreach (IGrouping<string, ServersideQoLZDO> item in (from sign in _signs
-			where !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty))
-			group sign by sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty)).ToList())
-		{
-			WarehouseNode warehouseNode = NearestUnambiguousWarehouse(((IEnumerable<ServersideQoLZDO>)item).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetInt("ModerWarehouse.BoardCell", -1) == 12)), list, maxDistance);
-			if (warehouseNode == null)
-			{
-				continue;
-			}
-			foreach (ServersideQoLZDO item2 in item)
-			{
-				if (SetWarehouseKey(item2, "ModerWarehouse.BoardWarehouse", warehouseNode.Id))
-				{
-					num++;
-				}
-			}
-		}
-		foreach (IGrouping<string, ServersideQoLZDO> item3 in (from sign in _signs
-			where !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty))
-			group sign by sign.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty)).ToList())
-		{
-			WarehouseNode warehouseNode2 = NearestUnambiguousWarehouse(((IEnumerable<ServersideQoLZDO>)item3).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetInt("ModerWarehouse.StatsCell", -1) == 12)), list, maxDistance);
-			if (warehouseNode2 == null)
-			{
-				continue;
-			}
-			foreach (ServersideQoLZDO item4 in item3)
-			{
-				if (SetWarehouseKey(item4, "ModerWarehouse.StatsWarehouse", warehouseNode2.Id))
-				{
-					num++;
-				}
-			}
-		}
-		foreach (ServersideQoLZDO sign2 in _signs)
-		{
-			WarehouseNode warehouseNode3 = NearestUnambiguousWarehouse(sign2, list, maxDistance);
-			if (warehouseNode3 == null)
-			{
-				continue;
-			}
-			if (sign2.ZDO.GetBool("ModerWarehouse.HelpChild", false) && SetWarehouseKey(sign2, "ModerWarehouse.HelpWarehouse", warehouseNode3.Id))
-			{
-				num++;
-			}
-			string[] array = new string[2] { "ModerWarehouse.RequestWarehouse", "ModerWarehouse.InfoWarehouse" };
-			foreach (string text2 in array)
-			{
-				string text3 = sign2.ZDO.GetString(text2, string.Empty);
-				if (!string.IsNullOrWhiteSpace(text3) && !hashSet.Contains(text3) && SetWarehouseKey(sign2, text2, warehouseNode3.Id))
-				{
-					num++;
-				}
-			}
-			Regex marker2 = Marker;
-			vars = sign2.Vars;
-			Match match2 = marker2.Match(PlainText(vars.GetText("")));
-			if (!match2.Success || match2.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
-			{
-				continue;
-			}
-			string text4 = match2.Groups["id"].Value.Trim();
-			if (text4.Equals(warehouseNode3.Id, StringComparison.OrdinalIgnoreCase) || hashSet.Contains(text4))
-			{
-				continue;
-			}
-			string text5 = match2.Groups["role"].Value.ToUpperInvariant();
-			string text6 = text5 switch
-			{
-				"STATS" => "ModerWarehouse.StatsWarehouse", 
-				"BOARD" => "ModerWarehouse.BoardWarehouse", 
-				"INFO" => "ModerWarehouse.InfoWarehouse", 
-				"REQ" => "ModerWarehouse.RequestWarehouse", 
-				"OUT" => null, 
-				_ => null, 
-			};
-			if (!(text5 != "OUT") || text6 != null)
-			{
-				if (!sign2.IsOwnerOrUnassigned())
-				{
-					sign2.ClaimOwnership();
-				}
-				vars = sign2.Vars;
-				vars.SetText("[WH:" + warehouseNode3.Id + ":" + text5 + "]" + match2.Groups["payload"].Value);
-				if (text6 != null)
-				{
-					SetWarehouseKey(sign2, text6, warehouseNode3.Id);
-				}
-				num++;
-			}
-		}
-		if (num > 0)
-		{
-			this.Logger.LogInfo((object)$"Recovered {num} stale sign link(s) by nearby warehouse identity (within {50f:0} m); board groups and sleep/wake panels reattached.");
-		}
-	}
-
-	private static WarehouseNode NearestUnambiguousWarehouse(ServersideQoLZDO sign, List<WarehouseNode> warehouses, float maxDistance2)
-	{
-		if (sign == null)
-		{
-			return null;
-		}
-		var list = (from node in warehouses
-			select new
-			{
-				Node = node,
-				Distance2 = Distance2(sign, node.Input)
-			} into item
-			where item.Distance2 <= maxDistance2
-			orderby item.Distance2
-			select item).Take(2).ToList();
-		if (list.Count == 0)
-		{
-			return null;
-		}
-		if (list.Count > 1 && Mathf.Abs(list[1].Distance2 - list[0].Distance2) < 1f)
-		{
-			return null;
-		}
-		return list[0].Node;
-	}
-
-	private static bool SetWarehouseKey(ServersideQoLZDO sign, string key, string id)
+	private static bool SetWarehouseKey(ServersideQoLZDO sign, int key, string id)
 	{
 		if (sign.ZDO.GetString(key, string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase))
 		{
@@ -1928,12 +2352,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private List<WarehouseNode> DiscoverWarehouseNodes(List<ServersideQoLZDO> containers, float markerRange2)
 	{
-		//IL_0025: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002a: Unknown result type (might be due to invalid IL or missing references)
 		List<WarehouseNode> list = new List<WarehouseNode>();
 		foreach (ServersideQoLZDO sign in _signs)
 		{
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			ServersideQoLZDO.ZDOVars vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
 			if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
@@ -1942,7 +2364,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				if (val != null)
 				{
 					float num = ParseInputRadius(match.Groups["payload"].Value);
-					sign.ZDO.Set("ModerWarehouse.InputRadius", num);
+					sign.ZDO.Set(InputRadiusKey, num);
 					list.Add(new WarehouseNode(match.Groups["id"].Value, sign, val, num, ResolveLanguage(match.Groups["payload"].Value)));
 				}
 			}
@@ -1952,133 +2374,152 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private unsafe void ValidateWarehouseNodes(List<WarehouseNode> nodes, float markerRange2)
 	{
-		//IL_0032: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0037: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00e7: Unknown result type (might be due to invalid IL or missing references)
 		HashSet<string> hashSet = new HashSet<string>(StringComparer.Ordinal);
-		List<string> list = new List<string>();
+		Dictionary<string, string> dictionary = new Dictionary<string, string>(StringComparer.Ordinal) { ["CFG"] = ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value.ToString("R", CultureInfo.InvariantCulture) };
+		Vector3 position;
 		foreach (ServersideQoLZDO sign in _signs)
 		{
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			ServersideQoLZDO.ZDOVars vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
 			if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
 			{
 				string text = sign.ZDO.m_uid.ToString();
 				hashSet.Add(text);
-				string[] array = new string[5]
+				string key = "M:" + text;
+				string[] obj = new string[5]
 				{
-					text,
-					":",
 					match.Groups["id"].Value,
 					":",
+					null,
+					null,
 					null
 				};
-				Vector3 position = sign.ZDO.GetPosition();
-				array[4] = position.ToString("R");
-				list.Add(string.Concat(array));
+				position = sign.ZDO.GetPosition();
+				obj[2] = position.ToString("R");
+				obj[3] = ":";
+				obj[4] = ParseInputRadius(match.Groups["payload"].Value).ToString("R", CultureInfo.InvariantCulture);
+				dictionary[key] = string.Concat(obj);
 			}
-		}
-		string text2 = string.Join(";", nodes.Select(delegate(WarehouseNode node)
-		{
-			//IL_0012: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0017: Unknown result type (might be due to invalid IL or missing references)
-			//IL_004c: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0051: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0075: Unknown result type (might be due to invalid IL or missing references)
-			//IL_007a: Unknown result type (might be due to invalid IL or missing references)
-			string[] array2 = new string[9];
-			ZDOID uid = node.Sign.ZDO.m_uid;
-			array2[0] = uid.ToString();
-			array2[1] = ":";
-			array2[2] = node.Id;
-			array2[3] = ":";
-			uid = node.Input.ZDO.m_uid;
-			array2[4] = uid.ToString();
-			array2[5] = ":";
-			Vector3 position2 = node.Input.ZDO.GetPosition();
-			array2[6] = position2.ToString("R");
-			array2[7] = ":";
-			array2[8] = node.Radius.ToString("R", CultureInfo.InvariantCulture);
-			return string.Concat(array2);
-		}).OrderBy<string, string>((string result) => result, StringComparer.Ordinal)) + "|" + string.Join(";", list.OrderBy<string, string>((string result) => result, StringComparer.Ordinal)) + "|" + ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value.ToString("R", CultureInfo.InvariantCulture);
-		if (hashSet.Any((string uid) => !_globalInputErrors.ContainsKey(uid)) || text2 != _validatedTopology || (WarehouseClock.UtcNow - _globalInputValidationAt).TotalMinutes >= 5.0)
-		{
-			RefreshGlobalInputValidation(markerRange2);
-			_validatedTopology = text2;
 		}
 		foreach (WarehouseNode node in nodes)
 		{
-			if (_globalInputErrors.TryGetValue(node.Sign.ZDO.m_uid.ToString(), out var value) && !string.IsNullOrWhiteSpace(value))
+			ZDOID uid = node.Sign.ZDO.m_uid;
+			string key2 = "N:" + uid.ToString();
+			uid = node.Input.ZDO.m_uid;
+			string? text2 = uid.ToString();
+			position = node.Input.ZDO.GetPosition();
+			dictionary[key2] = text2 + ":" + position.ToString("R");
+		}
+		string value3;
+		string key3 = dictionary.FirstOrDefault((KeyValuePair<string, string> pair) => !_validatedTopologyParts.TryGetValue(pair.Key, out value3) || (value3 != pair.Value && !value3.StartsWith("~", StringComparison.Ordinal))).Key;
+		bool flag = hashSet.Any((string key4) => !_globalInputErrors.ContainsKey(key4));
+		if (GlobalScanPolicy.ShouldValidateTopology(flag, key3 != null, WarehouseClock.UtcNow, _globalInputValidationAt))
+		{
+			if (_validatedTopologyParts.Count > 0 && (key3 != null || flag))
 			{
-				node.Valid = false;
-				node.Error = value;
+				this.Logger.LogInfo((object)("Warehouse topology revalidation: " + ((key3 != null) ? ("changed '" + key3 + "'") : "new IN marker") + "."));
+			}
+			Dictionary<string, string> dictionary2 = new Dictionary<string, string>(StringComparer.Ordinal);
+			RefreshGlobalInputValidation(markerRange2, dictionary2);
+			foreach (KeyValuePair<string, string> item in dictionary2)
+			{
+				_validatedTopologyParts[item.Key] = item.Value;
+			}
+			foreach (KeyValuePair<string, string> item2 in dictionary)
+			{
+				if (!dictionary2.ContainsKey(item2.Key))
+				{
+					_validatedTopologyParts[item2.Key] = item2.Value;
+				}
+			}
+		}
+		else
+		{
+			foreach (KeyValuePair<string, string> item3 in dictionary)
+			{
+				if (_validatedTopologyParts.TryGetValue(item3.Key, out var value) && value.Length == item3.Value.Length + 1 && value.StartsWith("~", StringComparison.Ordinal) && string.CompareOrdinal(value, 1, item3.Value, 0, item3.Value.Length) == 0)
+				{
+					_validatedTopologyParts[item3.Key] = item3.Value;
+				}
+			}
+		}
+		foreach (WarehouseNode node2 in nodes)
+		{
+			if (_globalInputErrors.TryGetValue(node2.Sign.ZDO.m_uid.ToString(), out var value2) && !string.IsNullOrWhiteSpace(value2))
+			{
+				node2.Valid = false;
+				node2.Error = value2;
 			}
 		}
 	}
 
-	private void RefreshGlobalInputValidation(float markerRange2)
+	private unsafe void RefreshGlobalInputValidation(float markerRange2, Dictionary<string, string> facts)
 	{
-		//IL_007c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0083: Expected O, but got Unknown
-		//IL_036c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_037d: Unknown result type (might be due to invalid IL or missing references)
 		try
 		{
-			List<ZDO> list = new List<ZDO>();
-			List<PersistedSign> list2 = new List<PersistedSign>();
-			if (!ReadWorldChestsAndSigns(list, list2))
+			if (!ScanWorld(out var containers, out var signs))
 			{
 				return;
 			}
-			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(list);
-			List<PersistedInputCandidate> list3 = new List<PersistedInputCandidate>();
+			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(containers);
+			List<PersistedInputCandidate> list = new List<PersistedInputCandidate>();
 			int num = 0;
 			_globalInputErrors.Clear();
-			foreach (PersistedSign item2 in list2)
+			foreach (PersistedSign item in signs)
 			{
-				Match match = Marker.Match(item2.Text);
-				if (!match.Success || !match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
+				Match match = Marker.Match(item.Text);
+				if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
 				{
-					continue;
-				}
-				ZDO input = persistedContainerSpatialLookup.Nearest(item2.Zdo, markerRange2);
-				string id = match.Groups["id"].Value.Trim();
-				if (input == null)
-				{
-					_globalInputErrors[item2.Zdo.m_uid.ToString()] = "NO_INPUT";
-					num++;
-					this.Logger.LogWarning((object)$"IN '{id}' rejected: no input chest found within {Mathf.Sqrt(markerRange2):0.#} m.");
-					continue;
-				}
-				int infrastructure = list2.Count(delegate(PersistedSign other)
-				{
-					//IL_0092: Unknown result type (might be due to invalid IL or missing references)
-					//IL_009d: Unknown result type (might be due to invalid IL or missing references)
-					//IL_00a2: Unknown result type (might be due to invalid IL or missing references)
-					//IL_00a7: Unknown result type (might be due to invalid IL or missing references)
-					if (other.Zdo.GetString("ModerWarehouse.BoardWarehouse", string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase) || other.Zdo.GetString("ModerWarehouse.StatsWarehouse", string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase) || other.Zdo.GetString("ModerWarehouse.RequestWarehouse", string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase) || other.Zdo.GetString("ModerWarehouse.InfoWarehouse", string.Empty).Equals(id, StringComparison.OrdinalIgnoreCase))
+					ZDO val = persistedContainerSpatialLookup.Nearest(item.Zdo, markerRange2);
+					string text = match.Groups["id"].Value.Trim();
+					string text2 = item.Zdo.m_uid.ToString();
+					string key = "M:" + text2;
+					string[] obj = new string[5]
 					{
-						Vector3 val2 = other.Zdo.GetPosition() - input.GetPosition();
-						return val2.sqrMagnitude <= 14400f;
+						match.Groups["id"].Value,
+						":",
+						null,
+						null,
+						null
+					};
+					Vector3 position = item.Zdo.GetPosition();
+					obj[2] = position.ToString("R");
+					obj[3] = ":";
+					obj[4] = ParseInputRadius(match.Groups["payload"].Value).ToString("R", CultureInfo.InvariantCulture);
+					facts[key] = string.Concat(obj);
+					if (val != null)
+					{
+						string key2 = "N:" + text2;
+						ZDOID uid = val.m_uid;
+						string? text3 = uid.ToString();
+						position = val.GetPosition();
+						facts[key2] = "~" + text3 + ":" + position.ToString("R");
 					}
-					return false;
-				});
-				list3.Add(new PersistedInputCandidate(id, item2.Zdo, input, infrastructure, item2.Zdo.GetBool("ModerWarehouse.InputCanonical", false)));
+					if (val == null)
+					{
+						_globalInputErrors[item.Zdo.m_uid.ToString()] = "NO_INPUT";
+						num++;
+						this.Logger.LogWarning((object)$"IN '{text}' rejected: no input chest found within {Mathf.Sqrt(markerRange2):0.#} m.");
+					}
+					else
+					{
+						list.Add(new PersistedInputCandidate(text, item.Zdo, val, item.Zdo.GetBool(InputCanonicalKey, false)));
+					}
+				}
 			}
-			List<PersistedInputCandidate> list4 = new List<PersistedInputCandidate>();
+			List<PersistedInputCandidate> list2 = new List<PersistedInputCandidate>();
 			float minimum = Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value);
-			list3.Sort((PersistedInputCandidate left, PersistedInputCandidate right) => WarehouseDuplicatePolicy.Compare(left.Canonical, left.Infrastructure, left.Sign.m_uid.ToString(), right.Canonical, right.Infrastructure, right.Sign.m_uid.ToString()));
-			foreach (PersistedInputCandidate candidate in list3)
+			list.Sort((PersistedInputCandidate left, PersistedInputCandidate right) => WarehouseDuplicatePolicy.Compare(left.Canonical, left.Sign.m_uid.ToString(), right.Canonical, right.Sign.m_uid.ToString()));
+			foreach (PersistedInputCandidate candidate in list)
 			{
-				if (list4.FirstOrDefault((PersistedInputCandidate item) => item.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)) != null)
+				if (list2.FirstOrDefault((PersistedInputCandidate item) => item.Id.Equals(candidate.Id, StringComparison.OrdinalIgnoreCase)) != null)
 				{
 					_globalInputErrors[candidate.Sign.m_uid.ToString()] = "DUPLICATE";
 					this.Logger.LogWarning((object)("IN '" + candidate.Id + "' rejected: warehouse name already exists."));
 					continue;
 				}
-				PersistedInputCandidate persistedInputCandidate = list4.FirstOrDefault((PersistedInputCandidate item) => WarehouseDistancePolicy.IsTooClose(Vector3.Distance(item.Input.GetPosition(), candidate.Input.GetPosition()), minimum));
+				PersistedInputCandidate persistedInputCandidate = list2.FirstOrDefault((PersistedInputCandidate item) => WarehouseDistancePolicy.IsTooClose(Vector3.Distance(item.Input.GetPosition(), candidate.Input.GetPosition()), minimum));
 				if (persistedInputCandidate != null)
 				{
 					float num2 = Vector3.Distance(persistedInputCandidate.Input.GetPosition(), candidate.Input.GetPosition());
@@ -2087,21 +2528,22 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				else
 				{
-					list4.Add(candidate);
+					list2.Add(candidate);
 					if (!candidate.Canonical)
 					{
-						candidate.Sign.Set("ModerWarehouse.InputCanonical", true);
+						candidate.Sign.Set(InputCanonicalKey, true);
 					}
 					_globalInputErrors[candidate.Sign.m_uid.ToString()] = string.Empty;
 				}
 			}
-			HashSet<string> acceptedIds = new HashSet<string>(list4.Select((PersistedInputCandidate item) => item.Id), StringComparer.OrdinalIgnoreCase);
+			_acceptedWarehouseIds = list2.Select((PersistedInputCandidate item) => item.Id).ToList();
+			HashSet<string> acceptedIds = new HashSet<string>(list2.Select((PersistedInputCandidate item) => item.Id), StringComparer.OrdinalIgnoreCase);
 			bool flag = false;
-			foreach (string item3 in _warehouseStockSnapshots.Keys.Where((string item) => !acceptedIds.Contains(item)).ToList())
+			foreach (string item2 in _warehouseStockSnapshots.Keys.Where((string id) => !acceptedIds.Contains(id)).ToList())
 			{
-				_warehouseStockSnapshots.Remove(item3);
-				_warehouseStockTimes.Remove(item3);
-				_freshlyReadWarehouses.Remove(item3);
+				_warehouseStockSnapshots.Remove(item2);
+				_warehouseStockTimes.Remove(item2);
+				_freshlyReadWarehouses.Remove(item2);
 				flag = true;
 			}
 			if (flag)
@@ -2109,7 +2551,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				SaveStockCache();
 			}
 			_globalInputValidationAt = WarehouseClock.UtcNow;
-			this.Logger.LogInfo((object)($"Global warehouse topology: {list4.Count} accepted, " + $"{list3.Count - list4.Count + num} blocked IN marker(s)."));
+			this.Logger.LogInfo((object)($"Global warehouse topology: {list2.Count} accepted, " + $"{list.Count - list2.Count + num} blocked IN marker(s)."));
 		}
 		catch (Exception ex)
 		{
@@ -2119,15 +2561,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void UpdateInputHelpSigns(List<WarehouseNode> nodes)
 	{
-		//IL_0163: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0168: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0191: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0196: Unknown result type (might be due to invalid IL or missing references)
 		float num = Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value);
 		foreach (WarehouseNode node in nodes)
 		{
-			string group = node.Sign.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty);
-			ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO x) => x.ZDO.GetBool("ModerWarehouse.HelpChild", false) && x.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty) == group));
+			string group = node.Sign.ZDO.GetString(HelpGroupKey, string.Empty);
+			ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO x) => x.ZDO.GetBool(HelpChildKey, false) && x.ZDO.GetString(HelpGroupKey, string.Empty) == group));
 			bool flag = WarehouseLocalization.Resolve(node.Language) == "de";
 			string text = FormatInputError(node.Error, flag, num, ConfigBase<WarehouseConfig>.Instance.MarkerDistance.Value);
 			string text2 = (node.Valid ? string.Format("<color=#80ffff>{0} {1}\n<color=white>RADIUS {2:0.#} M\n<color=#80ff80>{3}\n<color=white>REQ: {4} 100", flag ? "LAGER" : "WAREHOUSE", node.Id.ToUpperInvariant(), node.Radius, flag ? "ABSTAND OK" : "DISTANCE OK", WarehouseLocalization.Text(node.Language, "request.example_item").ToUpperInvariant()) : string.Format("<color=#ff6666>{0}\n{1}\n<color=white>MIN {2:0} M\n{3}", flag ? "LAGER GESPERRT" : "WAREHOUSE LOCKED", text, num, flag ? "IN KORRIGIEREN" : "CORRECT IN MARKER"));
@@ -2185,12 +2623,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void UpdateUnpairedInputSigns(List<WarehouseNode> nodes)
 	{
-		//IL_00c8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00cd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01f2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01f7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0220: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0225: Unknown result type (might be due to invalid IL or missing references)
 		HashSet<string> hashSet = new HashSet<string>(nodes.Select((WarehouseNode node) => node.Sign.ZDO.m_uid.ToString()), StringComparer.Ordinal);
 		float num = Mathf.Max(1f, ConfigBase<WarehouseConfig>.Instance.MinimumWarehouseDistance.Value);
 		float value = ConfigBase<WarehouseConfig>.Instance.MarkerDistance.Value;
@@ -2201,7 +2633,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				continue;
 			}
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			ServersideQoLZDO.ZDOVars vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
 			if (!match.Success || !match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
@@ -2210,8 +2642,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			bool flag = WarehouseLocalization.Resolve(ResolveLanguage(match.Groups["payload"].Value)) == "de";
 			string text2 = FormatInputError(value2, flag, num, value);
-			string group = sign.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty);
-			ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO item) => item.ZDO.GetBool("ModerWarehouse.HelpChild", false) && item.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty) == group));
+			string group = sign.ZDO.GetString(HelpGroupKey, string.Empty);
+			ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO item) => item.ZDO.GetBool(HelpChildKey, false) && item.ZDO.GetString(HelpGroupKey, string.Empty) == group));
 			if (val == null)
 			{
 				continue;
@@ -2232,12 +2664,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private List<ServersideQoLZDO> StoresForNode(WarehouseNode node, List<ServersideQoLZDO> containers, float markerRange2, ContainerRegistryProcessor registry)
 	{
-		//IL_005b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0060: Unknown result type (might be due to invalid IL or missing references)
 		HashSet<ServersideQoLZDO> endpoints = new HashSet<ServersideQoLZDO> { node.Input };
 		foreach (ServersideQoLZDO sign in _signs)
 		{
-			Regex marker = Marker;
+			WarehouseText.MatchCache marker = Marker;
 			ServersideQoLZDO.ZDOVars vars = sign.Vars;
 			Match match = marker.Match(PlainText(vars.GetText("")));
 			if (!match.Success || !match.Groups["id"].Value.Equals(node.Id, StringComparison.OrdinalIgnoreCase))
@@ -2245,7 +2675,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				continue;
 			}
 			string text = match.Groups["role"].Value.ToUpperInvariant();
-			if (!(text != "IN") || !(text != "OUT"))
+			if (!(text != "IN") || !(text != "OUT") || !(text != "FILL"))
 			{
 				ServersideQoLZDO val = NearestContainer(sign, containers, markerRange2);
 				if (val != null)
@@ -2256,12 +2686,12 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		HashSet<ServersideQoLZDO> ignored = DiscoverIgnored(containers, markerRange2);
 		List<ServersideQoLZDO> signs = StorageSignsForNode(node);
-		Dictionary<ServersideQoLZDO, string> dictionary = DiscoverLabels(containers, ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value, signs, rememberItemTokens: false);
-		Dictionary<ServersideQoLZDO, ServersideQoLZDO> dictionary2 = DiscoverBlankSigns(containers, ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value, signs);
+		Dictionary<ServersideQoLZDO, string> dictionary = DiscoverLabels(containers, ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value, signs, rememberItemTokens: false, node.Id);
+		Dictionary<ServersideQoLZDO, ServersideQoLZDO> dictionary2 = DiscoverBlankSigns(containers, ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value, signs, node.Id);
 		HashSet<ServersideQoLZDO> optedIn = new HashSet<ServersideQoLZDO>(dictionary.Keys);
 		optedIn.UnionWith(dictionary2.Keys);
 		float radius2 = node.Radius * node.Radius;
-		return containers.Where((ServersideQoLZDO x) => optedIn.Contains(x) && CanManageContainer(x, endpoints, ignored, hasStorageSign: true) && Distance2(x, node.Input) <= radius2 && ContainsOnlyWarehouseItems(InventoryFor(registry, x))).ToList();
+		return containers.Where((ServersideQoLZDO x) => optedIn.Contains(x) && WarehouseContainerPolicy.CanManage(endpoints.Contains(x), ignored.Contains(x), IsPrivateContainer(x), inUse: false, hasStorageSign: true) && Distance2(x, node.Input) <= radius2 && ContainsOnlyWarehouseItems(InventoryFor(registry, x))).ToList();
 	}
 
 	private List<ServersideQoLZDO> StorageSignsForNode(WarehouseNode node)
@@ -2270,18 +2700,19 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return _signs.Where((ServersideQoLZDO sign) => Distance2(sign, node.Input) <= signRadius * signRadius || LinkedInside(sign, node)).ToList();
 	}
 
-	private Dictionary<ServersideQoLZDO, string> DiscoverLabels(List<ServersideQoLZDO> containers, float range2, IEnumerable<ServersideQoLZDO> signs = null, bool rememberItemTokens = true)
+	private Dictionary<ServersideQoLZDO, string> DiscoverLabels(List<ServersideQoLZDO> containers, float range2, IEnumerable<ServersideQoLZDO> signs = null, bool rememberItemTokens = true, string warehouseId = null)
 	{
-		//IL_0075: Unknown result type (might be due to invalid IL or missing references)
-		//IL_007a: Unknown result type (might be due to invalid IL or missing references)
 		Dictionary<ServersideQoLZDO, string> dictionary = new Dictionary<ServersideQoLZDO, string>();
 		if (rememberItemTokens)
 		{
 			_labelItemTokens.Clear();
+			_labelWarehouseIds.Clear();
+			_labelPriorities.Clear();
 		}
 		foreach (ServersideQoLZDO item in signs ?? StorageSigns)
 		{
-			if (IsRememberedRequest(item) || IsRememberedInfo(item) || IsRememberedBoard(item) || IsRememberedStats(item) || item.ZDO.GetBool("ModerWarehouse.HelpChild", false))
+			string labelWarehouse = item.ZDO.GetString(AutoLabelWarehouseKey, string.Empty);
+			if ((item.ZDO.GetBool(AutoLabelManagedKey, false) && !string.IsNullOrWhiteSpace(labelWarehouse) && !string.IsNullOrWhiteSpace(warehouseId) && !labelWarehouse.Equals(warehouseId, StringComparison.OrdinalIgnoreCase)) || IsRememberedRequest(item) || IsRememberedInfo(item) || IsRememberedBoard(item) || IsRememberedStats(item) || item.ZDO.GetBool(HelpChildKey, false))
 			{
 				continue;
 			}
@@ -2318,25 +2749,29 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			ServersideQoLZDO val = LinkedOrNearestContainer(item, containers, range2);
 			if (val != null)
 			{
-				dictionary[val] = (dictionary.TryGetValue(val, out var value) ? (value + " " + text) : text);
-				string value2 = item.ZDO.GetString("ModerWarehouse.AutoLabelItem", string.Empty);
+				dictionary[val] = (dictionary.TryGetValue(val, out var value) ? (value + "\u001f" + text) : text);
+				string value2 = item.ZDO.GetString(AutoLabelItemKey, string.Empty);
 				if (rememberItemTokens && !string.IsNullOrWhiteSpace(value2))
 				{
 					_labelItemTokens[val] = value2;
+				}
+				if (rememberItemTokens && item.ZDO.GetBool(AutoLabelManagedKey, false))
+				{
+					_labelWarehouseIds[val] = item.ZDO.GetString(AutoLabelWarehouseKey, string.Empty);
+					_labelPriorities[val] = item.ZDO.GetInt(AutoLabelPriorityKey, 0);
 				}
 			}
 		}
 		return dictionary;
 	}
 
-	private Dictionary<ServersideQoLZDO, ServersideQoLZDO> DiscoverBlankSigns(List<ServersideQoLZDO> containers, float range2, IEnumerable<ServersideQoLZDO> signs = null)
+	private Dictionary<ServersideQoLZDO, ServersideQoLZDO> DiscoverBlankSigns(List<ServersideQoLZDO> containers, float range2, IEnumerable<ServersideQoLZDO> signs = null, string warehouseId = null)
 	{
-		//IL_0054: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0059: Unknown result type (might be due to invalid IL or missing references)
 		Dictionary<ServersideQoLZDO, ServersideQoLZDO> dictionary = new Dictionary<ServersideQoLZDO, ServersideQoLZDO>();
 		foreach (ServersideQoLZDO item in signs ?? StorageSigns)
 		{
-			if (IsRememberedRequest(item) || IsRememberedInfo(item) || IsRememberedBoard(item) || IsRememberedStats(item) || item.ZDO.GetBool("ModerWarehouse.HelpChild", false))
+			string text = item.ZDO.GetString(AutoLabelWarehouseKey, string.Empty);
+			if ((item.ZDO.GetBool(AutoLabelManagedKey, false) && !string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(warehouseId) && !text.Equals(warehouseId, StringComparison.OrdinalIgnoreCase)) || IsRememberedRequest(item) || IsRememberedInfo(item) || IsRememberedBoard(item) || IsRememberedStats(item) || item.ZDO.GetBool(HelpChildKey, false))
 			{
 				continue;
 			}
@@ -2354,31 +2789,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return dictionary;
 	}
 
-	private bool RemoveSupersededGeneratedLabels(Dictionary<ServersideQoLZDO, ServersideQoLZDO> blankSigns, List<ServersideQoLZDO> containers, float range2)
-	{
-		bool result = false;
-		foreach (KeyValuePair<ServersideQoLZDO, ServersideQoLZDO> pair in blankSigns)
-		{
-			List<ServersideQoLZDO> list = StorageSigns.Where((ServersideQoLZDO sign) => sign != pair.Value && PlacedByWarehouse(sign) && sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false) && LinkedOrNearestContainer(sign, containers, range2) == pair.Key).ToList();
-			foreach (ServersideQoLZDO item in list)
-			{
-				_signs.Remove(item);
-				_storageSigns?.Remove(item);
-				item.Destroy();
-				result = true;
-			}
-			if (list.Count > 0)
-			{
-				this.Logger.LogInfo((object)$"Removed {list.Count} generated label(s) superseded by a blank sign at the same chest.");
-			}
-		}
-		return result;
-	}
-
 	private HashSet<ServersideQoLZDO> DiscoverIgnored(List<ServersideQoLZDO> containers, float range2)
 	{
-		//IL_0022: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0027: Unknown result type (might be due to invalid IL or missing references)
 		HashSet<ServersideQoLZDO> hashSet = new HashSet<ServersideQoLZDO>();
 		foreach (ServersideQoLZDO sign in _signs)
 		{
@@ -2407,185 +2819,83 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private ServersideQoLZDO NearestContainer(ServersideQoLZDO sign, List<ServersideQoLZDO> containers, float range2)
 	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_000b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0013: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0019: Unknown result type (might be due to invalid IL or missing references)
-		//IL_001f: Unknown result type (might be due to invalid IL or missing references)
+		if (!_nearestMemo.TryGetValue(containers, out var value))
+		{
+			value = (_nearestMemo[containers] = new Dictionary<(ServersideQoLZDO, float), ServersideQoLZDO>());
+		}
+		if (value.TryGetValue((sign, range2), out var value2))
+		{
+			return value2;
+		}
 		Vector3 position = sign.ZDO.GetPosition();
-		return Lookup(containers).Nearest(position.x, position.y, position.z, range2);
+		ServersideQoLZDO val = Lookup(containers).Nearest(position.x, position.y, position.z, range2);
+		value[(sign, range2)] = val;
+		return val;
 	}
 
 	private static bool LinkedInside(ServersideQoLZDO sign, WarehouseNode node)
 	{
-		//IL_003f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_004f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0054: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0059: Unknown result type (might be due to invalid IL or missing references)
-		Vector3 val = new Vector3(sign.ZDO.GetFloat("ModerWarehouse.AutoChestX", float.NaN), sign.ZDO.GetFloat("ModerWarehouse.AutoChestY", float.NaN), sign.ZDO.GetFloat("ModerWarehouse.AutoChestZ", float.NaN)) - node.Input.ZDO.GetPosition();
+		Vector3 val = new Vector3(sign.ZDO.GetFloat(AutoChestXKey, float.NaN), sign.ZDO.GetFloat(AutoChestYKey, float.NaN), sign.ZDO.GetFloat(AutoChestZKey, float.NaN)) - node.Input.ZDO.GetPosition();
 		return val.sqrMagnitude <= node.Radius * node.Radius;
 	}
 
-	private string CreateAutomaticLabel(ServersideQoLZDO chest, ItemData item, Dictionary<ServersideQoLZDO, ServersideQoLZDO> blankSigns, string language)
+	private string CreateAutomaticLabel(string warehouseId, ServersideQoLZDO chest, ItemData item, Dictionary<ServersideQoLZDO, ServersideQoLZDO> blankSigns, string language)
 	{
-		//IL_0023: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0028: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0122: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0127: Unknown result type (might be due to invalid IL or missing references)
-		//IL_012a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0137: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0183: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0188: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ab: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01be: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01d6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ee: Unknown result type (might be due to invalid IL or missing references)
+		if (!blankSigns.TryGetValue(chest, out var value))
+		{
+			return null;
+		}
 		string text = LocalizedItemName(item, language);
-		ServersideQoLZDO.ZDOVars vars;
-		if (blankSigns.TryGetValue(chest, out var value))
+		if (!value.IsOwnerOrUnassigned())
 		{
-			if (!value.IsOwnerOrUnassigned())
-			{
-				value.ClaimOwnership();
-			}
-			vars = value.Vars;
-			vars.SetText("<color=white>" + text);
-			MarkAutomaticLabel(value, chest, item?.m_shared?.m_name);
-			this.Logger.LogInfo((object)("Reused blank sign and labeled chest '" + text + "'."));
-			_pendingLabels.Remove(chest);
-			return text;
+			value.ClaimOwnership();
 		}
-		DateTime utcNow = WarehouseClock.UtcNow;
-		string text2 = item?.m_shared?.m_name ?? string.Empty;
-		if (!_pendingLabels.TryGetValue(chest, out var value2) || value2.ItemType != text2)
-		{
-			_pendingLabels[chest] = new PendingLabel(text2, utcNow);
-			return null;
-		}
-		if ((utcNow - value2.Since).TotalSeconds < (double)Math.Max(5f, ConfigBase<WarehouseConfig>.Instance.AutoLabelDelay.Value))
-		{
-			return null;
-		}
-		Vector3 val = AutomaticLabelPosition(chest);
-		ServersideQoLZDO val2 = this.PlacePiece(val, Prefabs.Sign, chest.ZDO.GetRotation(), (CreatorMarkers)2);
-		if (val2 == null)
-		{
-			return null;
-		}
-		val2.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-		vars = val2.Vars;
+		ServersideQoLZDO.ZDOVars vars = value.Vars;
 		vars.SetText("<color=white>" + text);
-		Vector3 position = chest.ZDO.GetPosition();
-		val2.ZDO.Set("ModerWarehouse.AutoChestX", position.x);
-		val2.ZDO.Set("ModerWarehouse.AutoChestY", position.y);
-		val2.ZDO.Set("ModerWarehouse.AutoChestZ", position.z);
-		val2.ZDO.Set("ModerWarehouse.AutoLabelManaged", true);
-		val2.ZDO.Set("ModerWarehouse.AutoLabelItem", item?.m_shared?.m_name ?? string.Empty);
-		if (_signs.Add(val2))
-		{
-			val2.Destroyed += delegate(ServersideQoLZDO destroyed)
-			{
-				_signs.Remove(destroyed);
-			};
-		}
-		_pendingLabels.Remove(chest);
-		this.Logger.LogInfo((object)("Created persistent automatic label '" + text + "'."));
+		MarkAutomaticLabel(value, chest, item?.m_shared?.m_name, warehouseId, 0);
+		this.Logger.LogInfo((object)("Reused blank sign and labeled chest '" + text + "'."));
 		return text;
 	}
 
-	private void RepairGeneratedLabelPlacement(List<ServersideQoLZDO> containers, float range2)
+	private static void MarkAutomaticLabel(ServersideQoLZDO sign, ServersideQoLZDO chest, string itemToken, string warehouseId, int priority)
 	{
-		//IL_006c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0071: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0078: Unknown result type (might be due to invalid IL or missing references)
-		//IL_007d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_007e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0083: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0097: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00f8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00fd: Unknown result type (might be due to invalid IL or missing references)
-		foreach (ServersideQoLZDO item in StorageSigns.Where((ServersideQoLZDO x) => PlacedByWarehouse(x) && x.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false)).ToList())
-		{
-			ServersideQoLZDO val = LinkedOrNearestContainer(item, containers, range2);
-			if (val == null || (_localStorage != null && !_localStorage.Contains(val)))
-			{
-				continue;
-			}
-			Vector3 val2 = AutomaticLabelPosition(val);
-			Vector3 val3 = item.ZDO.GetPosition() - val2;
-			if (val3.sqrMagnitude <= 0.0225f)
-			{
-				continue;
-			}
-			ServersideQoLZDO val4 = this.PlacePiece(val2, Prefabs.Sign, val.ZDO.GetRotation(), (CreatorMarkers)2);
-			if (val4 == null)
-			{
-				continue;
-			}
-			val4.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-			ServersideQoLZDO.ZDOVars vars = val4.Vars;
-			ServersideQoLZDO.ZDOVars vars2 = item.Vars;
-			vars.SetText(vars2.GetText("") ?? string.Empty);
-			MarkAutomaticLabel(val4, val, item.ZDO.GetString("ModerWarehouse.AutoLabelItem", string.Empty));
-			if (_signs.Add(val4))
-			{
-				val4.Destroyed += delegate(ServersideQoLZDO destroyed)
-				{
-					_signs.Remove(destroyed);
-				};
-			}
-			_signs.Remove(item);
-			_storageSigns?.Remove(item);
-			_storageSigns?.Add(val4);
-			item.Destroy();
-			this.Logger.LogInfo((object)"Moved a generated storage label from the back to the decorated front of its chest.");
-		}
-	}
-
-	private static Vector3 AutomaticLabelPosition(ServersideQoLZDO chest)
-	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0011: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0025: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002a: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002f: Unknown result type (might be due to invalid IL or missing references)
-		return chest.ZDO.GetPosition() + chest.ZDO.GetRotation() * new Vector3(0f, 0.35f, 0.65f);
-	}
-
-	private static void MarkAutomaticLabel(ServersideQoLZDO sign, ServersideQoLZDO chest, string itemToken)
-	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_000b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0017: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0043: Unknown result type (might be due to invalid IL or missing references)
 		Vector3 position = chest.ZDO.GetPosition();
-		sign.ZDO.Set("ModerWarehouse.AutoChestX", position.x);
-		sign.ZDO.Set("ModerWarehouse.AutoChestY", position.y);
-		sign.ZDO.Set("ModerWarehouse.AutoChestZ", position.z);
-		sign.ZDO.Set("ModerWarehouse.AutoLabelManaged", true);
-		sign.ZDO.Set("ModerWarehouse.AutoLabelItem", itemToken ?? string.Empty);
+		sign.ZDO.Set(AutoChestXKey, position.x);
+		sign.ZDO.Set(AutoChestYKey, position.y);
+		sign.ZDO.Set(AutoChestZKey, position.z);
+		sign.ZDO.Set(AutoLabelManagedKey, true);
+		sign.ZDO.Set(AutoLabelItemKey, itemToken ?? string.Empty);
+		sign.ZDO.Set(AutoLabelWarehouseKey, warehouseId ?? string.Empty);
+		sign.ZDO.Set(AutoLabelPriorityKey, (priority >= 1 && priority <= 99) ? priority : 0, false);
 	}
 
-	private void RefreshAutomaticLabels(List<ServersideQoLZDO> containers, float range2, ContainerRegistryProcessor registry, string language)
+	private void RefreshAutomaticLabels(List<ServersideQoLZDO> containers, float range2, ContainerRegistryProcessor registry, string language, string warehouseId)
 	{
-		//IL_0143: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0148: Unknown result type (might be due to invalid IL or missing references)
-		//IL_016f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0174: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00fb: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0100: Unknown result type (might be due to invalid IL or missing references)
 		foreach (ServersideQoLZDO storageSign in StorageSigns)
 		{
-			string text = storageSign.ZDO.GetString("ModerWarehouse.AutoLabelItem", string.Empty);
-			bool num = storageSign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false);
-			bool flag = !float.IsNaN(storageSign.ZDO.GetFloat("ModerWarehouse.AutoChestX", float.NaN));
-			if (!num && !flag)
+			string text = storageSign.ZDO.GetString(AutoLabelItemKey, string.Empty);
+			if (!storageSign.ZDO.GetBool(AutoLabelManagedKey, false))
 			{
+				continue;
+			}
+			string text2 = storageSign.ZDO.GetString(AutoLabelWarehouseKey, string.Empty);
+			if (!string.IsNullOrWhiteSpace(text2) && !text2.Equals(warehouseId, StringComparison.OrdinalIgnoreCase))
+			{
+				continue;
+			}
+			if (string.IsNullOrWhiteSpace(text2))
+			{
+				storageSign.ZDO.Set(AutoLabelWarehouseKey, warehouseId);
+			}
+			ServersideQoLZDO.ZDOVars vars = storageSign.Vars;
+			if (WarehouseContainerPolicy.IsExplicitLabelReset(PlainText(vars.GetText(""))))
+			{
+				if (!storageSign.IsOwnerOrUnassigned())
+				{
+					storageSign.ClaimOwnership();
+				}
+				storageSign.ZDO.Set(AutoLabelItemKey, string.Empty);
+				storageSign.ZDO.Set(AutoLabelPriorityKey, 0, false);
 				continue;
 			}
 			ServersideQoLZDO val = LinkedOrNearestContainer(storageSign, containers, range2);
@@ -2593,7 +2903,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				continue;
 			}
-			ServersideQoLZDO.ZDOVars vars;
 			if (string.IsNullOrWhiteSpace(text))
 			{
 				IInventory val2 = InventoryFor(registry, val);
@@ -2607,10 +2916,16 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				{
 					continue;
 				}
-				MarkAutomaticLabel(storageSign, val, text);
+				MarkAutomaticLabel(storageSign, val, text, warehouseId, 0);
 			}
-			string text2 = LocalizedTokenName(text, language);
-			string text3 = "<color=white>" + text2;
+			int num = storageSign.ZDO.GetInt(AutoLabelPriorityKey, 0);
+			vars = storageSign.Vars;
+			if (WarehouseContainerPolicy.TryParseNumberedLabel(PlainText(vars.GetText("")), out var itemLabel, out var priority) && LabelNameMatchesToken(itemLabel, text))
+			{
+				num = priority;
+				storageSign.ZDO.Set(AutoLabelPriorityKey, num, false);
+			}
+			string text3 = FormatAutomaticLabel(LocalizedTokenName(text, language), num);
 			vars = storageSign.Vars;
 			if (!string.Equals(vars.GetText(""), text3, StringComparison.Ordinal))
 			{
@@ -2653,46 +2968,74 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return token ?? string.Empty;
 	}
 
-	private void LabelHomogeneousStores(List<ServersideQoLZDO> stores, Dictionary<ServersideQoLZDO, string> labels, Dictionary<ServersideQoLZDO, ServersideQoLZDO> blankSigns, ContainerRegistryProcessor registry, string language)
+	private static bool LabelNameMatchesToken(string label, string token)
 	{
-		//IL_0033: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
+		string text = Normalize(label);
+		if (text == Normalize(token) || text == Normalize(token?.Replace("$item_", string.Empty)))
+		{
+			return true;
+		}
+		if ((!GermanDisplayNames.TryGetValue(token ?? string.Empty, out var value) || !(text == Normalize(value))) && (!EnglishDisplayNames.TryGetValue(token ?? string.Empty, out var value2) || !(text == Normalize(value2))))
+		{
+			if (PrefabNames.TryGetValue(token ?? string.Empty, out var value3))
+			{
+				return text == Normalize(value3);
+			}
+			return false;
+		}
+		return true;
+	}
+
+	private static string FormatAutomaticLabel(string name, int priority)
+	{
+		if (priority < 1 || priority > 99)
+		{
+			return "<color=white>" + name;
+		}
+		return $"<color=white>{name} <size=60%>{priority}</size>";
+	}
+
+	private int FillPriority(ServersideQoLZDO chest, string warehouseId, string itemToken)
+	{
+		if (!_labelItemTokens.TryGetValue(chest, out var value) || !string.Equals(value, itemToken, StringComparison.Ordinal) || !_labelWarehouseIds.TryGetValue(chest, out var value2) || !string.Equals(value2, warehouseId, StringComparison.OrdinalIgnoreCase))
+		{
+			return int.MaxValue;
+		}
+		int value3;
+		return WarehouseContainerPolicy.EffectiveFillPriority(_labelPriorities.TryGetValue(chest, out value3) ? value3 : 0);
+	}
+
+	private void LabelHomogeneousStores(string warehouseId, List<ServersideQoLZDO> stores, Dictionary<ServersideQoLZDO, string> labels, Dictionary<ServersideQoLZDO, ServersideQoLZDO> blankSigns, ContainerRegistryProcessor registry, string language)
+	{
 		if (!ConfigBase<WarehouseConfig>.Instance.AutoCreateLabels.Value)
 		{
 			return;
 		}
 		foreach (ServersideQoLZDO store in stores)
 		{
-			if (!labels.ContainsKey(store))
+			if (labels.ContainsKey(store))
 			{
-				ServersideQoLZDO.ZDOVars vars = store.Vars;
-				if (!vars.GetInUse(false))
+				continue;
+			}
+			ServersideQoLZDO.ZDOVars vars = store.Vars;
+			if (vars.GetInUse(false) || registry.GetState(store) == null)
+			{
+				continue;
+			}
+			List<ItemData> list = InventoryFor(registry, store).Items.Where((ItemData x) => x != null && x.m_stack > 0 && x.m_shared != null).ToList();
+			if (list.Count == 0)
+			{
+				continue;
+			}
+			string itemType = list[0].m_shared.m_name;
+			if (!list.Any((ItemData x) => x.m_shared.m_name != itemType))
+			{
+				string value = CreateAutomaticLabel(warehouseId, store, list[0], blankSigns, language);
+				if (!string.IsNullOrEmpty(value))
 				{
-					if (registry.GetState(store) == null)
-					{
-						continue;
-					}
-					List<ItemData> list = InventoryFor(registry, store).Items.Where((ItemData x) => x != null && x.m_stack > 0 && x.m_shared != null).ToList();
-					if (list.Count == 0)
-					{
-						_pendingLabels.Remove(store);
-						continue;
-					}
-					string itemType = list[0].m_shared.m_name;
-					if (list.Any((ItemData x) => x.m_shared.m_name != itemType))
-					{
-						_pendingLabels.Remove(store);
-						continue;
-					}
-					string value = CreateAutomaticLabel(store, list[0], blankSigns, language);
-					if (!string.IsNullOrEmpty(value))
-					{
-						labels[store] = value;
-					}
-					continue;
+					labels[store] = value;
 				}
 			}
-			_pendingLabels.Remove(store);
 		}
 	}
 
@@ -2701,21 +3044,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return WarehouseContainerPolicy.IsPrivatePrefab(Processor.GetPrefabInfo(chest).PrefabName);
 	}
 
-	private bool CanManageContainer(ServersideQoLZDO chest, HashSet<ServersideQoLZDO> endpoints, HashSet<ServersideQoLZDO> ignored, bool hasStorageSign)
-	{
-		//IL_0018: Unknown result type (might be due to invalid IL or missing references)
-		//IL_001d: Unknown result type (might be due to invalid IL or missing references)
-		bool endpoint = endpoints.Contains(chest);
-		bool ignored2 = ignored.Contains(chest);
-		bool isPrivate = IsPrivateContainer(chest);
-		ServersideQoLZDO.ZDOVars vars = chest.Vars;
-		return WarehouseContainerPolicy.CanManage(endpoint, ignored2, isPrivate, vars.GetInUse(false), hasStorageSign);
-	}
-
 	private void WhitenWarehouseLabels(List<ServersideQoLZDO> managed, List<ServersideQoLZDO> containers, float range2)
 	{
-		//IL_0035: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003a: Unknown result type (might be due to invalid IL or missing references)
 		HashSet<ServersideQoLZDO> hashSet = new HashSet<ServersideQoLZDO>(managed);
 		foreach (ServersideQoLZDO storageSign in StorageSigns)
 		{
@@ -2738,10 +3068,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static void WriteWhite(ServersideQoLZDO sign, string plain)
 	{
-		//IL_0001: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0038: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003d: Unknown result type (might be due to invalid IL or missing references)
 		ServersideQoLZDO.ZDOVars vars = sign.Vars;
 		if (!(vars.GetText("") ?? string.Empty).StartsWith("<color=white>", StringComparison.OrdinalIgnoreCase))
 		{
@@ -2779,15 +3105,22 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	private int CorrectMisfiledItems(string warehouseId, List<ServersideQoLZDO> stores, Dictionary<ServersideQoLZDO, string> labels, ContainerRegistryProcessor registry, ref int moves)
 	{
 		int num = 0;
+		DateTime utcNow = WarehouseClock.UtcNow;
+		DateTime value;
+		bool flag = !_miscJanitorAt.TryGetValue(warehouseId, out value) || utcNow >= value;
+		if (flag)
+		{
+			_miscJanitorAt[warehouseId] = utcNow.AddSeconds(30.0);
+		}
 		foreach (ServersideQoLZDO sourceZdo in stores.ToList())
 		{
-			if (moves <= 0 || !labels.TryGetValue(sourceZdo, out var value))
+			if (moves <= 0 || !labels.TryGetValue(sourceZdo, out var value2) || (!flag && IsMiscChest(sourceZdo, labels)))
 			{
 				continue;
 			}
 			ContainerState state = registry.GetState(sourceZdo);
 			IInventory val = InventoryFor(registry, sourceZdo);
-			if (val == null)
+			if (val == null || state == null)
 			{
 				continue;
 			}
@@ -2797,7 +3130,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				{
 					break;
 				}
-				if (item == null || item.m_stack <= 0 || !IsWarehouseItem(item) || LabelMatches(sourceZdo, value, item, registry))
+				if (item == null || item.m_stack <= 0 || !IsWarehouseItem(item) || LabelMatches(sourceZdo, value2, item, registry))
 				{
 					continue;
 				}
@@ -2806,18 +3139,12 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 					break;
 				}
 				int num2 = item.m_stack;
-				string value3;
-				foreach (ServersideQoLZDO item2 in (from targetZdo in stores
+				string value4;
+				foreach (ServersideQoLZDO item2 in from targetZdo in stores
 					where targetZdo != sourceZdo
-					where labels.TryGetValue(targetZdo, out value3) ? LabelMatches(targetZdo, value3, item, registry) : IsSingleItemType(InventoryFor(registry, targetZdo), item)
-					select targetZdo).OrderByDescending(delegate(ServersideQoLZDO targetZdo)
-				{
-					if (HasItem(InventoryFor(registry, targetZdo), item))
-					{
-						return 2;
-					}
-					return (labels.TryGetValue(targetZdo, out value3) && LabelMatches(targetZdo, value3, item, registry)) ? 1 : 0;
-				}).ThenBy((ServersideQoLZDO targetZdo) => Distance2(targetZdo, sourceZdo)))
+					where (!labels.TryGetValue(targetZdo, out value4)) ? IsSingleItemType(InventoryFor(registry, targetZdo), item) : LabelMatches(targetZdo, value4, item, registry)
+					orderby FillPriority(targetZdo, warehouseId, item.m_shared.m_name), (!HasItem(InventoryFor(registry, targetZdo), item)) ? ((labels.TryGetValue(targetZdo, out value4) && LabelMatches(targetZdo, value4, item, registry)) ? 1 : 0) : 2 descending, Distance2(targetZdo, sourceZdo)
+					select targetZdo)
 				{
 					if (moves <= 0 || num2 <= 0)
 					{
@@ -2829,9 +3156,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 						int num3 = Move(val, InventoryFor(registry, item2), item, num2);
 						if (num3 > 0)
 						{
-							string value2;
-							string text = (labels.TryGetValue(item2, out value2) ? PlainText(value2).Trim() : "(free/unlabelled)");
-							this.Logger.LogInfo((object)($"Warehouse '{warehouseId}' janitor moved {num3} x " + "'" + item.m_shared.m_name + "' from '" + PlainText(value).Trim() + "' to '" + text + "'."));
+							string value3;
+							string text = (labels.TryGetValue(item2, out value3) ? LabelForLog(value3) : "(free/unlabelled)");
+							this.Logger.LogInfo((object)($"Warehouse '{warehouseId}' janitor moved {num3} x " + "'" + item.m_shared.m_name + "' from '" + LabelForLog(value2) + "' to '" + text + "'."));
 							num += num3;
 							num2 -= num3;
 							moves--;
@@ -2843,63 +3170,32 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return num;
 	}
 
-	private int SanitizeForbiddenItems(IEnumerable<ServersideQoLZDO> targets, ContainerRegistryProcessor registry, List<ServersideQoLZDO> allContainers, float markerRange2)
+	private void ReportQuarantinedStorage(string warehouseId, List<ServersideQoLZDO> quarantined, ContainerRegistryProcessor registry)
 	{
-		//IL_0096: Unknown result type (might be due to invalid IL or missing references)
-		//IL_009b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ef: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01f4: Unknown result type (might be due to invalid IL or missing references)
-		int num = 0;
-		foreach (ServersideQoLZDO chest in targets.Where((ServersideQoLZDO x) => x != null).Distinct())
+		string text = string.Join(";", quarantined.Select((ServersideQoLZDO chest) => chest.ZDO.m_uid.ToString()).OrderBy<string, string>((string uid) => uid, StringComparer.Ordinal));
+		if (_quarantineReported.TryGetValue(warehouseId, out var value) && value == text)
 		{
-			ContainerState state = registry.GetState(chest);
-			IInventory val = InventoryFor(registry, chest);
-			if (val == null)
-			{
-				continue;
-			}
-			ServersideQoLZDO.ZDOVars vars = chest.Vars;
-			if (vars.GetInUse(false))
-			{
-				continue;
-			}
-			List<ItemData> list = val.Items.Where((ItemData item) => item != null && item.m_stack > 0 && !IsWarehouseItem(item)).ToList();
-			if (list.Count == 0 || !Own(state))
-			{
-				continue;
-			}
-			int num2 = 0;
-			foreach (ItemData item in list)
-			{
-				int stack = item.m_stack;
-				if (val.Inventory.RemoveItem(item, stack))
-				{
-					num2 += stack;
-				}
-			}
-			if (num2 == 0)
-			{
-				continue;
-			}
-			val.Save();
-			num += num2;
-			if (val.Items.Any((ItemData item) => item != null && item.m_stack > 0))
-			{
-				continue;
-			}
-			foreach (ServersideQoLZDO item2 in StorageSigns.Where((ServersideQoLZDO sign) => sign.ZDO.GetBool("ModerWarehouse.AutoLabelManaged", false) && LinkedOrNearestContainer(sign, allContainers, markerRange2) == chest))
-			{
-				if (!item2.IsOwnerOrUnassigned())
-				{
-					item2.ClaimOwnership();
-				}
-				item2.ZDO.Set("ModerWarehouse.AutoLabelItem", string.Empty);
-				vars = item2.Vars;
-				vars.SetText("<color=white>-");
-			}
-			_pendingLabels.Remove(chest);
+			return;
 		}
-		return num;
+		_quarantineReported[warehouseId] = text;
+		if (quarantined.Count == 0)
+		{
+			return;
+		}
+		foreach (ServersideQoLZDO item in quarantined.Take(10))
+		{
+			Vector3 position = item.ZDO.GetPosition();
+			IInventory obj = InventoryFor(registry, item);
+			IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+			string text2 = string.Join(", ", from stack in enumerable ?? Enumerable.Empty<ItemData>()
+				where stack != null && stack.m_stack > 0 && !IsWarehouseItem(stack)
+				select $"{ItemName(stack)} x{stack.m_stack}" + (stack.m_cheated ? " (cheated)" : string.Empty));
+			this.Logger.LogWarning((object)($"Warehouse '{warehouseId}': signed chest at {position.x:0.#}/{position.y:0.#}/{position.z:0.#} " + "is excluded from the warehouse because it holds non-warehouse item(s): " + text2 + ". Nothing was removed."));
+		}
+		if (quarantined.Count > 10)
+		{
+			this.Logger.LogWarning((object)$"Warehouse '{warehouseId}': {quarantined.Count - 10} further signed chest(s) are excluded for the same reason.");
+		}
 	}
 
 	private static bool IsWarehouseItem(ItemData item)
@@ -2927,12 +3223,16 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return value;
 	}
 
-	private void ProcessRequest(string id, string language, Request request, ServersideQoLZDO outputZdo, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2)
+	private void ProcessRequest(string id, string language, Request request, ServersideQoLZDO outputZdo, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, float markerRange2)
 	{
-		//IL_0092: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0097: Unknown result type (might be due to invalid IL or missing references)
-		if (string.IsNullOrWhiteSpace(request.Payload) || IsStatus(request.Payload) || IsRequestPrompt(request.Payload) || request.Payload.StartsWith("SOLL ", StringComparison.OrdinalIgnoreCase) || string.Equals(request.Payload, request.Sign.ZDO.GetString("ModerWarehouse.RequestRenderedText", string.Empty), StringComparison.Ordinal))
+		if (!IsWithdrawalRequest(request))
 		{
+			return;
+		}
+		if (outputZdo == null)
+		{
+			WriteStatus(request.Sign, WarehouseLocalization.Text(language, "request.no_output"));
+			_requestClearAt[request.Sign] = WarehouseClock.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
 			return;
 		}
 		ServersideQoLZDO.ZDOVars vars = outputZdo.Vars;
@@ -2951,7 +3251,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			if (!worldRead)
 			{
-				RefreshWorldStockIndex(network, containers, markerRange2, registry);
+				RefreshWorldStockIndex(markerRange2);
 				worldRead = true;
 			}
 		};
@@ -2961,7 +3261,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			select x).Take(10).ToArray();
 		if (array.Length == 0)
 		{
-			WriteStatus(id, request.Sign, WarehouseLocalization.Text(language, "request.error_example"));
+			WriteStatus(request.Sign, WarehouseLocalization.Text(language, "request.error_example"));
 			return;
 		}
 		List<string> list = new List<string>();
@@ -2971,7 +3271,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			if (TryParseCraftRequest(text, out var craftQuery, out var craftCount, out var craftLevel))
 			{
-				list.Add(ProcessCraftRequest(id, language, craftQuery, craftCount, craftLevel, output, stores, registry, stats, ref moves, action, network, containers, markerRange2, craftReserved));
+				list.Add(ProcessCraftRequest(id, language, craftQuery, craftCount, craftLevel, output, stores, registry, stats, ref moves, action, craftReserved));
 				continue;
 			}
 			if (text.IndexOf('*') >= 0)
@@ -2990,7 +3290,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			if (locallyAvailable < amount)
 			{
 				action();
-				List<string> list2 = FindRemoteStock(id, query, network, containers, markerRange2, registry);
+				List<string> list2 = FindRemoteStock(id, language, query);
 				if (list2.Count > 0)
 				{
 					text2 = text2 + "\n" + string.Join(" | ", list2);
@@ -3006,67 +3306,118 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			list.Add(text2);
 		}
-		WriteStatus(id, request.Sign, string.Join("\n", list));
+		WriteStatus(request.Sign, string.Join("\n", list));
 		_requestClearAt[request.Sign] = WarehouseClock.UtcNow.AddSeconds(RequestDisplayPolicy.ClampResultSeconds(ConfigBase<WarehouseConfig>.Instance.RequestResultSeconds.Value));
+	}
+
+	private static bool IsWithdrawalRequest(Request request)
+	{
+		if (!string.IsNullOrWhiteSpace(request.Payload) && !IsStatus(request.Payload) && !IsRequestPrompt(request.Payload) && !RequestPolicy.TryStripKeyword(request.Payload, WarehouseLocalization.TargetKeywords(), out var _))
+		{
+			return !string.Equals(request.Payload, request.Sign.ZDO.GetString(RequestRenderedTextKey, string.Empty), StringComparison.Ordinal);
+		}
+		return false;
 	}
 
 	private string ProcessSingleRequest(string id, string language, string query, int amount, IInventory output, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, out int locallyAvailable)
 	{
-		//IL_00a6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00ab: Unknown result type (might be due to invalid IL or missing references)
 		int num = amount;
 		int num2 = 0;
 		string text = query;
-		locallyAvailable = (from item in stores.SelectMany(delegate(ServersideQoLZDO store)
+		List<ItemData> list = (from item in stores.SelectMany(delegate(ServersideQoLZDO store)
 			{
 				IInventory val2 = InventoryFor(registry, store);
 				IEnumerable<ItemData> enumerable = ((val2 != null) ? val2.Items : null);
 				return enumerable ?? Enumerable.Empty<ItemData>();
 			})
-			where item != null && item.m_stack > 0 && ItemMatchesQuery(item, query)
-			select item).Sum((ItemData item) => item.m_stack);
+			where item != null && item.m_stack > 0 && item.m_shared != null
+			select item).ToList();
+		string token = ChooseRequestToken(list, query);
+		locallyAvailable = list.Where(Requested).Sum((ItemData item) => item.m_stack);
 		bool flag = locallyAvailable > 0;
-		foreach (ServersideQoLZDO store in stores)
+		foreach (ServersideQoLZDO item in stores.OrderByDescending(delegate(ServersideQoLZDO store)
+		{
+			IInventory obj = InventoryFor(registry, store);
+			IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+			return (enumerable ?? Enumerable.Empty<ItemData>()).Where(Requested).Select(delegate(ItemData item)
+			{
+				int num4 = FillPriority(store, id, item.m_shared?.m_name);
+				return (num4 == int.MaxValue) ? 1 : num4;
+			}).DefaultIfEmpty(1)
+				.Max();
+		}))
 		{
 			if (moves <= 0 || num <= 0)
 			{
 				break;
 			}
-			ServersideQoLZDO.ZDOVars vars = store.Vars;
+			ServersideQoLZDO.ZDOVars vars = item.Vars;
 			if (vars.GetInUse(false))
 			{
 				continue;
 			}
-			ContainerState state = registry.GetState(store);
+			ContainerState state = registry.GetState(item);
 			if (state == null || !Own(state))
 			{
 				continue;
 			}
-			IInventory val = InventoryFor(registry, store);
-			foreach (ItemData item in val.Items.Where((ItemData x) => ItemMatchesQuery(x, query)).ToList())
+			IInventory val = InventoryFor(registry, item);
+			foreach (ItemData item2 in val.Items.Where(Requested).ToList())
 			{
 				if (moves <= 0 || num <= 0)
 				{
 					break;
 				}
 				flag = true;
-				text = LocalizedItemName(item, language);
-				int num3 = Move(val, output, item, num);
+				text = LocalizedItemName(item2, language);
+				int num3 = Move(val, output, item2, num);
 				if (num3 > 0)
 				{
 					num2 += num3;
 					num -= num3;
 					moves--;
-					stats?.AddOutput(item.m_shared.m_name, num3);
+					stats?.AddOutput(item2.m_shared.m_name, num3);
 				}
 			}
 		}
 		string result = ((num2 == amount) ? WarehouseLocalization.Format(language, "request.done", text, num2) : ((num2 > 0) ? WarehouseLocalization.Format(language, "request.partial", text, num2, amount) : (flag ? WarehouseLocalization.Format(language, "request.output_full", text) : WarehouseLocalization.Format(language, "request.not_found", query))));
 		this.Logger.LogInfo((object)($"Warehouse '{id}': withdrawal '{query}' moved {num2}/{amount} item(s)." + ((locallyAvailable < amount) ? $" Local stock {locallyAvailable}/{amount}; informational world lookup may follow." : string.Empty)));
 		return result;
+		bool Requested(ItemData item)
+		{
+			if (token != null && item != null && item.m_stack > 0 && item.m_shared != null && item.m_shared.m_name == token)
+			{
+				return ItemMatchesQuery(item, query);
+			}
+			return false;
+		}
 	}
 
-	private List<string> FindRemoteStock(string localId, string query, List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2, ContainerRegistryProcessor registry)
+	private static string ChooseRequestToken(IEnumerable<ItemData> items, string query)
+	{
+		string text = Normalize(query);
+		if (string.IsNullOrEmpty(text))
+		{
+			return null;
+		}
+		Dictionary<string, (int, int)> dictionary = new Dictionary<string, (int, int)>(StringComparer.Ordinal);
+		foreach (ItemData item in items)
+		{
+			if (item?.m_shared != null && item.m_stack > 0 && ItemMatchesQuery(item, query))
+			{
+				string name = item.m_shared.m_name;
+				string value;
+				string value2;
+				bool localizedName = (EnglishNames.TryGetValue(name, out value) && value == text) || (GermanNames.TryGetValue(name, out value2) && value2 == text);
+				bool prefabOrToken = Normalize(ItemName(item)) == text || Normalize(name.Replace("$item_", string.Empty)) == text;
+				int num = RequestPolicy.MatchRank(localizedName, prefabOrToken);
+				dictionary[name] = (dictionary.TryGetValue(name, out var value3) ? (Math.Min(value3.Item1, num), value3.Item2 + item.m_stack) : (num, item.m_stack));
+			}
+		}
+		return RequestPolicy.ChooseToken(dictionary.Select<KeyValuePair<string, (int, int)>, (string, int, int)>((KeyValuePair<string, (int Rank, int Amount)> pair) => (Key: pair.Key, Rank: pair.Value.Rank, Amount: pair.Value.Amount)));
+	}
+
+	private List<string> FindRemoteStock(string localId, string language, string query)
 	{
 		List<string> list = new List<string>();
 		foreach (KeyValuePair<string, Dictionary<string, int>> item in _warehouseStockSnapshots.Where((KeyValuePair<string, Dictionary<string, int>> pair) => !pair.Key.Equals(localId, StringComparison.OrdinalIgnoreCase)).OrderBy<KeyValuePair<string, Dictionary<string, int>>, string>((KeyValuePair<string, Dictionary<string, int>> pair) => pair.Key, StringComparer.OrdinalIgnoreCase))
@@ -3074,7 +3425,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			int num = item.Value.Where((KeyValuePair<string, int> stock) => TokenMatchesQuery(stock.Key, query)).Sum((KeyValuePair<string, int> stock) => stock.Value);
 			if (num > 0)
 			{
-				list.Add(item.Key.ToUpperInvariant() + " " + FormatAmount(num) + " " + StockStatus(item.Key, LanguageForWarehouse(localId)));
+				list.Add(item.Key.ToUpperInvariant() + " " + FormatAmount(num) + " " + StockStatus(item.Key, language));
 			}
 		}
 		return list;
@@ -3082,17 +3433,30 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static bool TokenMatchesQuery(string token, string query)
 	{
-		string normalized = Normalize(query);
-		if (string.IsNullOrWhiteSpace(normalized))
+		string value = Normalize(query);
+		if (string.IsNullOrWhiteSpace(value) || string.IsNullOrEmpty(token))
 		{
 			return false;
 		}
-		return new string[3]
+		return Array.IndexOf(TokenAliases(token), value) >= 0;
+	}
+
+	private static string[] TokenAliases(string token)
+	{
+		string value;
+		string text = (PrefabNames.TryGetValue(token, out value) ? value : token);
+		string key = text + "\u0001" + token;
+		if (AliasCache.TryGetValue(key, out var value2))
 		{
-			token,
-			LocalizedTokenName(token, "de"),
-			LocalizedTokenName(token, "en")
-		}.Select(Normalize).Any((string name) => name == normalized);
+			return value2;
+		}
+		string value3;
+		string englishNormalized = (EnglishNames.TryGetValue(token, out value3) ? value3 : null);
+		string value4;
+		string germanNormalized = (GermanNames.TryGetValue(token, out value4) ? value4 : null);
+		string[] array = WarehouseText.BuildAliases(text, token, englishNormalized, germanNormalized);
+		AliasCache[key] = array;
+		return array;
 	}
 
 	private string BuildRequestSuggestions(string localId, string language, string query)
@@ -3164,114 +3528,113 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private void RefreshWorldStockIndex(List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2, ContainerRegistryProcessor registry)
+	private void RefreshWorldStockIndex(float markerRange2)
 	{
 		// The world index decodes chest contents from saved ZDO data, so pending moves must be written first.
 		FlushInventorySaves();
 		_freshlyReadWarehouses.Clear();
-		if (RefreshPersistedWorldStockIndex(markerRange2))
+		DateTime utcNow = WarehouseClock.UtcNow;
+		if (GlobalScanPolicy.ShouldRefreshWorldStock(utcNow, _worldStockRefreshAt))
 		{
-			SaveStockCache();
+			bool num = RefreshPersistedWorldStockIndex(markerRange2);
+			_worldStockRefreshAt = utcNow;
+			if (num)
+			{
+				SaveStockCache();
+			}
 		}
 	}
 
 	private bool RefreshPersistedWorldStockIndex(float markerRange2)
 	{
-		//IL_009c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_00a3: Expected O, but got Unknown
 		Stopwatch stopwatch = Stopwatch.StartNew();
 		long num = 0L;
 		long num2 = 0L;
 		long num3 = 0L;
 		try
 		{
-			List<ZDO> list = new List<ZDO>();
-			List<PersistedSign> list2 = new List<PersistedSign>();
-			if (!ReadWorldChestsAndSigns(list, list2))
+			List<ZDO> containers;
+			List<PersistedSign> signs;
+			int worldObjects;
+			bool flag = ResolveWorldIndex(out containers, out signs, out worldObjects);
+			if (containers == null)
 			{
 				return false;
 			}
 			num = stopwatch.ElapsedMilliseconds;
-			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(list);
-			List<PersistedWarehouse> list3 = new List<PersistedWarehouse>();
-			foreach (PersistedSign item2 in list2)
+			PersistedContainerSpatialLookup persistedContainerSpatialLookup = new PersistedContainerSpatialLookup(containers);
+			List<PersistedWarehouse> list = new List<PersistedWarehouse>();
+			foreach (PersistedSign item in signs)
 			{
-				Match match = Marker.Match(item2.Text);
+				Match match = Marker.Match(item.Text);
 				if (match.Success && match.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase))
 				{
-					ZDO val2 = persistedContainerSpatialLookup.Nearest(item2.Zdo, markerRange2);
-					if (val2 != null)
+					ZDO val = persistedContainerSpatialLookup.Nearest(item.Zdo, markerRange2);
+					if (val != null)
 					{
-						list3.Add(new PersistedWarehouse(match.Groups["id"].Value.Trim(), item2.Zdo, val2, ParseInputRadius(match.Groups["payload"].Value)));
+						list.Add(new PersistedWarehouse(match.Groups["id"].Value.Trim(), item.Zdo, val, ParseInputRadius(match.Groups["payload"].Value)));
 					}
 				}
 			}
-			if (list3.Count == 0)
+			if (list.Count == 0)
 			{
 				return false;
 			}
 			HashSet<ZDO> endpoints = new HashSet<ZDO>();
 			HashSet<ZDO> ignored = new HashSet<ZDO>();
-			foreach (PersistedSign item3 in list2)
+			foreach (PersistedSign item2 in signs)
 			{
-				Match match2 = Marker.Match(item3.Text);
-				bool flag = match2.Success && (match2.Groups["role"].Value.Equals("IN", StringComparison.OrdinalIgnoreCase) || match2.Groups["role"].Value.Equals("OUT", StringComparison.OrdinalIgnoreCase));
-				bool flag2 = IgnoreMarker.IsMatch(item3.Text);
-				if (!flag && !flag2)
+				Match match2 = Marker.Match(item2.Text);
+				string text = (match2.Success ? match2.Groups["role"].Value.ToUpperInvariant() : string.Empty);
+				bool flag2 = text == "IN" || text == "OUT" || text == "FILL";
+				bool flag3 = IgnoreMarker.IsMatch(item2.Text);
+				if (!flag2 && !flag3)
 				{
 					continue;
 				}
-				ZDO val3 = persistedContainerSpatialLookup.Nearest(item3.Zdo, markerRange2);
-				if (val3 != null)
+				ZDO val2 = persistedContainerSpatialLookup.Nearest(item2.Zdo, markerRange2);
+				if (val2 != null)
 				{
-					if (flag)
-					{
-						endpoints.Add(val3);
-					}
 					if (flag2)
 					{
-						ignored.Add(val3);
+						endpoints.Add(val2);
+					}
+					if (flag3)
+					{
+						ignored.Add(val2);
 					}
 				}
 			}
 			float range = ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value * ConfigBase<WarehouseConfig>.Instance.LabelDistance.Value;
 			HashSet<ZDO> hashSet = new HashSet<ZDO>();
-			foreach (PersistedSign item4 in list2)
+			foreach (PersistedSign item3 in signs)
 			{
-				string input = item4.Text ?? string.Empty;
-				if (!Marker.IsMatch(input) && !IgnoreMarker.IsMatch(input) && !DeleteMarker.IsMatch(input) && !CleanMarker.IsMatch(input) && !item4.Zdo.GetBool("ModerWarehouse.HelpChild", false) && string.IsNullOrWhiteSpace(item4.Zdo.GetString("ModerWarehouse.RequestWarehouse", string.Empty)) && string.IsNullOrWhiteSpace(item4.Zdo.GetString("ModerWarehouse.InfoWarehouse", string.Empty)) && string.IsNullOrWhiteSpace(item4.Zdo.GetString("ModerWarehouse.BoardWarehouse", string.Empty)) && string.IsNullOrWhiteSpace(item4.Zdo.GetString("ModerWarehouse.StatsWarehouse", string.Empty)))
+				string text2 = item3.Text ?? string.Empty;
+				if (!Marker.IsMatch(text2) && !IgnoreMarker.IsMatch(text2) && !DeleteMarker.IsMatch(text2) && !CleanMarker.IsMatch(text2) && !item3.Zdo.GetBool(HelpChildKey, false) && string.IsNullOrWhiteSpace(item3.Zdo.GetString(RequestWarehouseKey, string.Empty)) && string.IsNullOrWhiteSpace(item3.Zdo.GetString(InfoWarehouseKey, string.Empty)) && string.IsNullOrWhiteSpace(item3.Zdo.GetString(BoardWarehouseKey, string.Empty)) && string.IsNullOrWhiteSpace(item3.Zdo.GetString(StatsWarehouseKey, string.Empty)))
 				{
-					ZDO val4 = persistedContainerSpatialLookup.Nearest(item4.Zdo, range);
-					if (val4 != null)
+					ZDO val3 = persistedContainerSpatialLookup.Nearest(item3.Zdo, range);
+					if (val3 != null)
 					{
-						hashSet.Add(val4);
+						hashSet.Add(val3);
 					}
 				}
 			}
 			num2 = stopwatch.ElapsedMilliseconds - num;
-			string value4;
-			List<PersistedWarehouse> validNodes = (from @group in list3.Where((PersistedWarehouse candidate) => !_globalInputErrors.TryGetValue(candidate.Sign.m_uid.ToString(), out value4) || string.IsNullOrWhiteSpace(value4)).GroupBy<PersistedWarehouse, string>((PersistedWarehouse candidate) => candidate.Id, StringComparer.OrdinalIgnoreCase)
+			string value2;
+			List<PersistedWarehouse> validNodes = (from @group in list.Where((PersistedWarehouse candidate) => !_globalInputErrors.TryGetValue(candidate.Sign.m_uid.ToString(), out value2) || string.IsNullOrWhiteSpace(value2)).GroupBy<PersistedWarehouse, string>((PersistedWarehouse candidate) => candidate.Id, StringComparer.OrdinalIgnoreCase)
 				select @group.First()).ToList();
 			HashSet<ZDO> eligibleStorage = new HashSet<ZDO>(hashSet.Where((ZDO chest) => !endpoints.Contains(chest) && !ignored.Contains(chest) && validNodes.Any(delegate(PersistedWarehouse persistedWarehouse)
 			{
-				//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-				//IL_0011: Unknown result type (might be due to invalid IL or missing references)
-				//IL_0016: Unknown result type (might be due to invalid IL or missing references)
-				//IL_001b: Unknown result type (might be due to invalid IL or missing references)
-				Vector3 val5 = chest.GetPosition() - persistedWarehouse.Input.GetPosition();
-				return val5.sqrMagnitude <= persistedWarehouse.Radius * persistedWarehouse.Radius;
+				Vector3 val4 = chest.GetPosition() - persistedWarehouse.Input.GetPosition();
+				return val4.sqrMagnitude <= persistedWarehouse.Radius * persistedWarehouse.Radius;
 			})));
-			List<PersistedContainer> list4 = new List<PersistedContainer>(eligibleStorage.Count);
-			foreach (ZDO item5 in eligibleStorage)
+			List<PersistedContainer> list2 = new List<PersistedContainer>(eligibleStorage.Count);
+			foreach (ZDO item4 in eligibleStorage)
 			{
-				byte[] byteArray = item5.GetByteArray(ZDOVars.s_items, (byte[])null);
-				if (byteArray != null && byteArray.Length != 0)
+				PersistedContainer persistedContainer = DecodeCached(item4);
+				if (persistedContainer != null)
 				{
-					PersistedContainer persistedContainer = ReadPersistedContainer(item5, byteArray);
-					if (persistedContainer != null)
-					{
-						list4.Add(persistedContainer);
-					}
+					list2.Add(persistedContainer);
 				}
 			}
 			num3 = stopwatch.ElapsedMilliseconds - num - num2;
@@ -3280,24 +3643,20 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			foreach (PersistedWarehouse node in validNodes)
 			{
 				float radius2 = node.Radius * node.Radius;
-				Dictionary<string, int> dictionary2 = (from item in list4.Where(delegate(PersistedContainer container)
+				Dictionary<string, int> dictionary = (from item in list2.Where(delegate(PersistedContainer container)
 					{
-						//IL_001e: Unknown result type (might be due to invalid IL or missing references)
-						//IL_002e: Unknown result type (might be due to invalid IL or missing references)
-						//IL_0033: Unknown result type (might be due to invalid IL or missing references)
-						//IL_0038: Unknown result type (might be due to invalid IL or missing references)
 						if (eligibleStorage.Contains(container.Zdo))
 						{
-							Vector3 val5 = container.Zdo.GetPosition() - node.Input.GetPosition();
-							return val5.sqrMagnitude <= radius2;
+							Vector3 val4 = container.Zdo.GetPosition() - node.Input.GetPosition();
+							return val4.sqrMagnitude <= radius2;
 						}
 						return false;
 					}).SelectMany((PersistedContainer container) => container.Items)
 					where item != null && item.m_stack > 0 && item.m_shared != null && IsWarehouseItem(item)
 					group item by item.m_shared.m_name).ToDictionary<IGrouping<string, ItemData>, string, int>((IGrouping<string, ItemData> group) => group.Key, (IGrouping<string, ItemData> group) => group.Sum((ItemData item) => item.m_stack), StringComparer.Ordinal);
-				if (!_warehouseStockSnapshots.TryGetValue(node.Id, out var value3) || !StockEqual(value3, dictionary2))
+				if (!_warehouseStockSnapshots.TryGetValue(node.Id, out var value) || !StockEqual(value, dictionary))
 				{
-					_warehouseStockSnapshots[node.Id] = dictionary2;
+					_warehouseStockSnapshots[node.Id] = dictionary;
 					result = true;
 				}
 				_warehouseStockTimes[node.Id] = utcNow;
@@ -3307,7 +3666,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			stopwatch.Stop();
 			if (stopwatch.ElapsedMilliseconds >= 100)
 			{
-				this.Logger.LogInfo((object)($"Global read-only stock query: {list3.Count} warehouse(s), " + $"{list4.Count}/{eligibleStorage.Count} eligible stocked container(s), " + $"{list.Count} world objects, {list2.Count} signs; " + $"{stopwatch.ElapsedMilliseconds} ms (scan {num}, " + $"signs {num2}, inventory decode {num3})."));
+				this.Logger.LogInfo((object)($"Global read-only stock query: {list.Count} warehouse(s), " + $"{list2.Count}/{eligibleStorage.Count} eligible stocked container(s), " + $"{worldObjects} world objects, {signs.Count} signs; " + string.Format("{0} ms ({1} {2}, ", stopwatch.ElapsedMilliseconds, flag ? "index" : "scan", num) + $"signs {num2}, inventory decode {num3})."));
 			}
 			return result;
 		}
@@ -3318,13 +3677,204 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
+	// The world's chests and signs come from the world index (WorldObjectIndex), kept as objects are
+	// created and destroyed, instead of a walk of every object; decoded inventories of chests that left
+	// the world are dropped.
+	private bool ScanWorld(out List<ZDO> containers, out List<PersistedSign> signs)
+	{
+		containers = new List<ZDO>();
+		signs = new List<PersistedSign>();
+		if (!ReadWorldChestsAndSigns(containers, signs))
+		{
+			containers = null;
+			signs = null;
+			return false;
+		}
+		if (_decodedContainers.Count > 0)
+		{
+			HashSet<ZDOID> live = new HashSet<ZDOID>(containers.Select((ZDO x) => x.m_uid));
+			foreach (ZDOID item in _decodedContainers.Keys.Where((ZDOID uid) => !live.Contains(uid)).ToList())
+			{
+				_decodedContainers.Remove(item);
+			}
+		}
+		return true;
+	}
+
+	// True when the chests and signs came from the index; containers is null when the world cannot be read.
+	private bool ResolveWorldIndex(out List<ZDO> containers, out List<PersistedSign> signs, out int worldObjects)
+	{
+		bool flag = ScanWorld(out containers, out signs);
+		worldObjects = (flag ? (containers.Count + signs.Count) : 0);
+		return flag;
+	}
+
+	private PersistedContainer DecodeCached(ZDO chest)
+	{
+		uint dataRevision = chest.DataRevision;
+		if (_decodedContainers.TryGetValue(chest.m_uid, out var value) && value.Key == dataRevision && value.Value?.Zdo == chest)
+		{
+			return value.Value;
+		}
+		byte[] byteArray = chest.GetByteArray(ZDOVars.s_items, (byte[])null);
+		PersistedContainer persistedContainer = ((byteArray == null || byteArray.Length == 0) ? null : ReadPersistedContainer(chest, byteArray));
+		_decodedContainers[chest.m_uid] = new KeyValuePair<uint, PersistedContainer>(dataRevision, persistedContainer);
+		return persistedContainer;
+	}
+
+	// Unity's frame count: the warm-up spends a few milliseconds per frame. The tests have no engine.
+	private static int FrameCount()
+	{
+		return Time.frameCount;
+	}
+
+	private bool IsDecoded(ContainerRegistryProcessor registry, ServersideQoLZDO zdo)
+	{
+		if (_warmReflectionFailed)
+		{
+			return true;
+		}
+		try
+		{
+			ContainerState state = registry.GetState(zdo);
+			if (state == null)
+			{
+				return true;
+			}
+			Type type = ((object)state).GetType();
+			if (type != _warmStateType)
+			{
+				_warmStateType = type;
+				_warmInventoryField = type.GetField("_inventory", BindingFlags.Instance | BindingFlags.NonPublic);
+				if (_warmInventoryField == null)
+				{
+					_warmReflectionFailed = true;
+					this.Logger.LogWarning((object)(type.FullName + "._inventory not found: inventory warm-up is off."));
+					return true;
+				}
+			}
+			return _warmInventoryField.GetValue(state) != null;
+		}
+		catch (Exception ex)
+		{
+			_warmReflectionFailed = true;
+			this.Logger.LogWarning((object)("Inventory warm-up is off: the container state could not be inspected. " + ex));
+			return true;
+		}
+	}
+
+	private bool DeferForInventoryWarmUp(string id, IEnumerable<ServersideQoLZDO> candidates)
+	{
+		DateTime utcNow = WarehouseClock.UtcNow;
+		DateTime value;
+		bool flag = _warmDeadline.TryGetValue(id, out value);
+		if (flag && utcNow >= value)
+		{
+			_warmDeadline.Remove(id);
+			return false;
+		}
+		if (!flag && _warmArmedAt.TryGetValue(id, out var value2) && (utcNow - value2).TotalSeconds < 60.0)
+		{
+			return false;
+		}
+		ContainerRegistryProcessor registry = Processor.Instance<ContainerRegistryProcessor>();
+		int num = 0;
+		foreach (ServersideQoLZDO candidate in candidates)
+		{
+			if (!IsDecoded(registry, candidate))
+			{
+				num++;
+				if (_warmQueued.Add(candidate))
+				{
+					_warmQueue.Enqueue(candidate);
+				}
+			}
+		}
+		if (num < 48)
+		{
+			_warmDeadline.Remove(id);
+			return false;
+		}
+		if (!flag)
+		{
+			_warmDeadline[id] = utcNow.AddSeconds(3.0);
+			_warmArmedAt[id] = utcNow;
+			this.Logger.LogInfo((object)$"Warehouse '{id}': decoding {num} chest inventories over the next frames before the first cycle.");
+		}
+		return true;
+	}
+
+	private void WarmInventories()
+	{
+		if (_warmQueue.Count == 0)
+		{
+			return;
+		}
+		int frameCount = FrameCount();
+		if (frameCount != _warmFrame)
+		{
+			_warmFrame = frameCount;
+			_warmSpentMs = 0.0;
+		}
+		if (_warmSpentMs >= 4.0)
+		{
+			return;
+		}
+		ContainerRegistryProcessor val = Processor.Instance<ContainerRegistryProcessor>();
+		Stopwatch stopwatch = Stopwatch.StartNew();
+		while (_warmQueue.Count > 0 && _warmSpentMs + stopwatch.Elapsed.TotalMilliseconds < 4.0)
+		{
+			ServersideQoLZDO val2 = _warmQueue.Dequeue();
+			_warmQueued.Remove(val2);
+			if (val2 == null)
+			{
+				continue;
+			}
+			try
+			{
+				ContainerState state = val.GetState(val2);
+				if (state != null)
+				{
+					state.GetInventory();
+				}
+			}
+			catch (Exception ex)
+			{
+				Vector3 position = val2.ZDO.GetPosition();
+				this.Logger.LogWarning((object)$"Inventory warm-up: the chest at {position.x:0.#}/{position.y:0.#}/{position.z:0.#} could not be read. {ex}");
+			}
+		}
+		_warmSpentMs += stopwatch.Elapsed.TotalMilliseconds;
+		if (_warmQueue.Count != 0)
+		{
+			return;
+		}
+		foreach (string key in _warmDeadline.Keys)
+		{
+			_warehousesDirty.Add(key);
+		}
+	}
+
+	private string CanonicalWarehouseId(string id)
+	{
+		if (_knownNodes.TryGetValue(id, out var value))
+		{
+			return value.Id;
+		}
+		foreach (string acceptedWarehouseId in _acceptedWarehouseIds)
+		{
+			if (acceptedWarehouseId.Equals(id, StringComparison.OrdinalIgnoreCase))
+			{
+				return acceptedWarehouseId;
+			}
+		}
+		return id;
+	}
+
 	private static PersistedContainer ReadPersistedContainer(ZDO zdo, byte[] data)
 	{
-		//IL_0033: Unknown result type (might be due to invalid IL or missing references)
 		//IL_003e: Expected O, but got Unknown
-		//IL_0082: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0089: Expected O, but got Unknown
-		//IL_008c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0096: Expected O, but got Unknown
 		ZNetScene instance = ZNetScene.instance;
 		GameObject val = (((UnityEngine.Object)(object)instance != (UnityEngine.Object)null) ? instance.GetPrefab(zdo.GetPrefab()) : null);
@@ -3619,7 +4169,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return (ObjectDB.instance?.m_recipes ?? new List<Recipe>()).Where((Recipe r) => (UnityEngine.Object)(object)r != (UnityEngine.Object)null && r.m_enabled && (UnityEngine.Object)(object)r.m_item != (UnityEngine.Object)null && r.m_item.m_itemData?.m_shared != null && r.m_resources != null && r.m_resources.Any((Piece.Requirement x) => (UnityEngine.Object)(object)x?.m_resItem != (UnityEngine.Object)null)).ToList();
 	}
 
-	private string ProcessCraftRequest(string id, string language, string query, int count, int level, IInventory output, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, Action readWorld, List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2, Dictionary<string, int> reserved)
+	private string ProcessCraftRequest(string id, string language, string query, int count, int level, IInventory output, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, WarehouseStatsHistory stats, ref int moves, Action readWorld, Dictionary<string, int> reserved)
 	{
 		string normalized = Normalize(query);
 		LoadGermanNames();
@@ -3707,7 +4257,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			if (locallyAvailable < num4)
 			{
 				readWorld();
-				List<string> list4 = FindRemoteStock(id, name, network, containers, markerRange2, registry);
+				List<string> list4 = FindRemoteStock(id, language, name);
 				if (list4.Count > 0)
 				{
 					text3 = text3 + " (" + string.Join(" | ", list4) + ")";
@@ -3785,7 +4335,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	internal static bool IsStatus(string payload)
 	{
-		return WarehouseLocalization.StartsWithAnyTranslation(payload, "request.done", "request.partial", "request.output_full", "request.not_found", "request.wildcard_too_many", "request.craft_header", "request.craft_header_level", "request.craft_unknown", "request.craft_max_level", "request.error", "request.error_example", "request.suggestions", "request.shown_on_board");
+		return WarehouseLocalization.StartsWithAnyTranslation(payload, "request.done", "request.partial", "request.output_full", "request.not_found", "request.wildcard_too_many", "request.craft_header", "request.craft_header_level", "request.craft_unknown", "request.craft_max_level", "request.error", "request.error_example", "request.suggestions", "request.shown_on_board", "request.no_output");
 	}
 
 	internal static bool IsRequestPrompt(string payload)
@@ -3798,9 +4348,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return true;
 	}
 
-	private static void WriteRequestPrompt(ServersideQoLZDO sign, string id, string language)
+	private static void WriteRequestPrompt(ServersideQoLZDO sign, string language)
 	{
-		string value = sign.ZDO.GetString("ModerWarehouse.RequestTargets", string.Empty);
+		string value = sign.ZDO.GetString(RequestTargetsKey, string.Empty);
 		string text = WarehouseLocalization.Text(language, "request.example_item");
 		string text2 = (string.IsNullOrWhiteSpace(value) ? ("<color=#80ffff>" + WarehouseLocalization.Text(language, "request.idle") + "\n<color=white>" + text + " 100\n" + WarehouseLocalization.Text(language, "request.target") + " " + text + " 1000") : ("<color=#80ffff>" + WarehouseLocalization.Text(language, "request.title") + "\n<color=white>" + WarehouseLocalization.Text(language, "request.updating")));
 		WriteRequestText(sign, text2);
@@ -3808,12 +4358,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static void WriteRequestText(ServersideQoLZDO sign, string text)
 	{
-		//IL_001e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0023: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0048: Unknown result type (might be due to invalid IL or missing references)
-		//IL_004d: Unknown result type (might be due to invalid IL or missing references)
 		string text2 = PlainText(text).Trim();
-		sign.ZDO.Set("ModerWarehouse.RequestRenderedText", text2);
+		sign.ZDO.Set(RequestRenderedTextKey, text2);
 		ServersideQoLZDO.ZDOVars vars = sign.Vars;
 		if (!string.Equals(vars.GetText(""), text, StringComparison.Ordinal))
 		{
@@ -3826,16 +4372,14 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private static void WriteStatus(string id, ServersideQoLZDO sign, string status)
+	private static void WriteStatus(ServersideQoLZDO sign, string status)
 	{
-		//IL_0036: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003b: Unknown result type (might be due to invalid IL or missing references)
 		if (!sign.IsOwnerOrUnassigned())
 		{
 			sign.ClaimOwnership();
 		}
 		string text = "<color=white>" + status;
-		sign.ZDO.Set("ModerWarehouse.RequestRenderedText", PlainText(text).Trim());
+		sign.ZDO.Set(RequestRenderedTextKey, PlainText(text).Trim());
 		ServersideQoLZDO.ZDOVars vars = sign.Vars;
 		vars.SetText(text);
 	}
@@ -3879,24 +4423,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void EnsureHelpSign(ServersideQoLZDO inputSign, string id, string language)
 	{
-		//IL_012b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0130: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ba: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01bf: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01c7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01cc: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01dd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01e2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01e7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ec: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ef: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01f6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0158: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0279: Unknown result type (might be due to invalid IL or missing references)
-		//IL_027e: Unknown result type (might be due to invalid IL or missing references)
-		inputSign.ZDO.Set("ModerWarehouse.HelpWarehouse", id);
-		string group = inputSign.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty);
+		inputSign.ZDO.Set(HelpWarehouseKey, id);
+		string group = inputSign.ZDO.GetString(HelpGroupKey, string.Empty);
 		if (string.IsNullOrWhiteSpace(group))
 		{
 			// A recreated IN sign lost its group id: re-adopt the help sign already standing next to it.
@@ -3908,7 +4436,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			inputSign.ZDO.Set("ModerWarehouse.HelpGroup", group);
 		}
-		ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetBool("ModerWarehouse.HelpChild", false) && sign.ZDO.GetString("ModerWarehouse.HelpGroup", string.Empty) == group));
+		ServersideQoLZDO val = ((IEnumerable<ServersideQoLZDO>)_signs).FirstOrDefault((Func<ServersideQoLZDO, bool>)((ServersideQoLZDO sign) => sign.ZDO.GetBool(HelpChildKey, false) && sign.ZDO.GetString(HelpGroupKey, string.Empty) == group));
 		string text = "<size=70%><color=#80ffff>" + WarehouseLocalization.Text(language, "help.title") + "\n<color=white>" + WarehouseLocalization.Text(language, "help.in") + "\n" + WarehouseLocalization.Text(language, "help.req") + "\n" + WarehouseLocalization.Text(language, "help.out") + "\n" + WarehouseLocalization.Text(language, "help.board");
 		ServersideQoLZDO.ZDOVars vars;
 		DateTime value;
@@ -3963,9 +4491,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				return;
 			}
 			val3.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-			val3.ZDO.Set("ModerWarehouse.HelpGroup", group);
-			val3.ZDO.Set("ModerWarehouse.HelpChild", true);
-			val3.ZDO.Set("ModerWarehouse.HelpWarehouse", id);
+			val3.ZDO.Set(HelpGroupKey, group);
+			val3.ZDO.Set(HelpChildKey, true);
+			val3.ZDO.Set(HelpWarehouseKey, id);
 			vars = val3.Vars;
 			vars.SetText(text);
 			if (_signs.Add(val3))
@@ -4120,21 +4648,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void EnsureBoard(ServersideQoLZDO anchor, string id)
 	{
-		//IL_0277: Unknown result type (might be due to invalid IL or missing references)
-		//IL_027c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0283: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0288: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02b7: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02b9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02dd: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02e2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02e5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ec: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0371: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0376: Unknown result type (might be due to invalid IL or missing references)
-		string group = anchor.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty);
+		string group = anchor.ZDO.GetString(BoardGroupKey, string.Empty);
 		if (string.IsNullOrWhiteSpace(group))
 		{
 			return;
@@ -4153,10 +4667,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			_boardEnsurePendingAt.Remove(group);
 			_boardReadyGroups.Add(group);
 		}
-		List<ServersideQoLZDO> source = _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == group).ToList();
+		List<ServersideQoLZDO> source = _signs.Where((ServersideQoLZDO x) => x.ZDO.GetString(BoardGroupKey, string.Empty) == group).ToList();
 		int num = 0;
 		foreach (IGrouping<int, ServersideQoLZDO> item in from x in source
-			group x by x.ZDO.GetInt("ModerWarehouse.BoardCell", -1))
+			group x by x.ZDO.GetInt(BoardCellKey, -1))
 		{
 			ServersideQoLZDO keep = ((item.Key == 12 && item.Contains(anchor)) ? anchor : item.First());
 			foreach (ServersideQoLZDO item2 in item.Where((ServersideQoLZDO x) => x != keep).ToList())
@@ -4171,8 +4685,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			this.Logger.LogInfo((object)$"Warehouse '{id}': removed {num} duplicate stock-board sign layer(s) from '{group}'.");
 		}
 		Dictionary<int, ServersideQoLZDO> dictionary = (from x in _signs
-			where x.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty) == @group
-			group x by x.ZDO.GetInt("ModerWarehouse.BoardCell", -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
+			where x.ZDO.GetString(BoardGroupKey, string.Empty) == @group
+			group x by x.ZDO.GetInt(BoardCellKey, -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
 		Quaternion rotation = anchor.ZDO.GetRotation();
 		Vector3 position = anchor.ZDO.GetPosition();
 		int num2 = 0;
@@ -4191,9 +4705,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				continue;
 			}
 			val2.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-			val2.ZDO.Set("ModerWarehouse.BoardWarehouse", id);
-			val2.ZDO.Set("ModerWarehouse.BoardGroup", group);
-			val2.ZDO.Set("ModerWarehouse.BoardCell", num3);
+			val2.ZDO.Set(BoardWarehouseKey, id);
+			val2.ZDO.Set(BoardGroupKey, group);
+			val2.ZDO.Set(BoardCellKey, num3, false);
 			ServersideQoLZDO.ZDOVars vars = val2.Vars;
 			vars.SetText("<color=white>...");
 			if (_signs.Add(val2))
@@ -4213,33 +4727,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void EnsureStatsBoard(ServersideQoLZDO anchor, string id)
 	{
-		//IL_013f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0144: Unknown result type (might be due to invalid IL or missing references)
-		//IL_014b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0150: Unknown result type (might be due to invalid IL or missing references)
-		//IL_017e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_017f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0199: Unknown result type (might be due to invalid IL or missing references)
-		//IL_019e: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01a3: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01a8: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01ab: Unknown result type (might be due to invalid IL or missing references)
-		//IL_01b2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02cf: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02d0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02e0: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02e5: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ea: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02ef: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f2: Unknown result type (might be due to invalid IL or missing references)
-		//IL_02f9: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0237: Unknown result type (might be due to invalid IL or missing references)
-		//IL_023c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0390: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0395: Unknown result type (might be due to invalid IL or missing references)
-		//IL_03b6: Unknown result type (might be due to invalid IL or missing references)
-		//IL_03bb: Unknown result type (might be due to invalid IL or missing references)
-		string group = anchor.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty);
+		string group = anchor.ZDO.GetString(StatsGroupKey, string.Empty);
 		if (string.IsNullOrWhiteSpace(group))
 		{
 			return;
@@ -4259,8 +4747,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			_statsReadyGroups.Add(group);
 		}
 		Dictionary<int, ServersideQoLZDO> dictionary = (from x in _signs
-			where x.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty) == @group
-			group x by x.ZDO.GetInt("ModerWarehouse.StatsCell", -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
+			where x.ZDO.GetString(StatsGroupKey, string.Empty) == @group
+			group x by x.ZDO.GetInt(StatsCellKey, -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
 		Quaternion rotation = anchor.ZDO.GetRotation();
 		Vector3 position = anchor.ZDO.GetPosition();
 		int num = 0;
@@ -4280,9 +4768,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				continue;
 			}
 			val2.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-			val2.ZDO.Set("ModerWarehouse.StatsWarehouse", id);
-			val2.ZDO.Set("ModerWarehouse.StatsGroup", group);
-			val2.ZDO.Set("ModerWarehouse.StatsCell", num2);
+			val2.ZDO.Set(StatsWarehouseKey, id);
+			val2.ZDO.Set(StatsGroupKey, group);
+			val2.ZDO.Set(StatsCellKey, num2, false);
 			vars = val2.Vars;
 			vars.SetText("<color=white>...");
 			if (_signs.Add(val2))
@@ -4294,22 +4782,23 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			num++;
 		}
-		if (!dictionary.Values.Any((ServersideQoLZDO x) => x.ZDO.GetBool("ModerWarehouse.StatsControl", false)))
+		if (!dictionary.Values.Any((ServersideQoLZDO x) => x.ZDO.GetBool(StatsControlKey, false)))
 		{
 			Vector3 val3 = position + rotation * new Vector3(-1.53f, -0.55f, 0f);
 			ServersideQoLZDO val4 = this.PlacePiece(val3, Prefabs.Sign, rotation, (CreatorMarkers)2);
 			if (val4 != null)
 			{
 				val4.Fields<Piece>().Set((Func<Expression<Func<Piece, bool>>>)(() => (Piece x) => x.m_canBeRemoved), true);
-				val4.ZDO.Set("ModerWarehouse.StatsWarehouse", id);
-				val4.ZDO.Set("ModerWarehouse.StatsGroup", group);
-				val4.ZDO.Set("ModerWarehouse.StatsCell", -2);
-				val4.ZDO.Set("ModerWarehouse.StatsControl", true);
+				val4.ZDO.Set(StatsWarehouseKey, id);
+				val4.ZDO.Set(StatsGroupKey, group);
+				val4.ZDO.Set(StatsCellKey, -2, false);
+				val4.ZDO.Set(StatsControlKey, true);
 				vars = val4.Vars;
-				vars.SetText("<color=#80ffff>CONTROL\n<color=white>E: 1-90 AUTO");
+				vars.SetText("<color=#80ffff>CONTROL\n<color=white>E: 1-" + 365 + " AUTO");
 				ZDO zDO = val4.ZDO;
+				int boardRenderedTextKey = BoardRenderedTextKey;
 				vars = val4.Vars;
-				zDO.Set("ModerWarehouse.BoardRenderedText", PlainText(vars.GetText("")).Trim());
+				zDO.Set(boardRenderedTextKey, PlainText(vars.GetText("")).Trim());
 				if (_signs.Add(val4))
 				{
 					val4.Destroyed += delegate(ServersideQoLZDO destroyed)
@@ -4328,13 +4817,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void CaptureBoardControlInput(ServersideQoLZDO sign, string group, int cell)
 	{
-		//IL_0031: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0036: Unknown result type (might be due to invalid IL or missing references)
 		if (string.IsNullOrWhiteSpace(group) || (cell != 1 && cell != 2))
 		{
 			return;
 		}
-		string text = sign.ZDO.GetString("ModerWarehouse.BoardRenderedText", string.Empty);
+		string text = sign.ZDO.GetString(BoardRenderedTextKey, string.Empty);
 		if (string.IsNullOrEmpty(text))
 		{
 			return;
@@ -4381,10 +4868,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		this.Logger.LogInfo((object)("Stock board '" + group + "': filter='" + (value.Prefix ?? "ALLE") + "', page=" + (value.Page.HasValue ? value.Page.Value.ToString() : "1") + " for 60 seconds."));
 	}
 
-	private void WriteShoppingLists(string id, string language, IEnumerable<ServersideQoLZDO> requestSigns, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry)
+	private void WriteShoppingLists(string language, IEnumerable<ServersideQoLZDO> requestSigns, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry)
 	{
-		//IL_0096: Unknown result type (might be due to invalid IL or missing references)
-		//IL_009b: Unknown result type (might be due to invalid IL or missing references)
 		List<ItemData> items = (from item in stores.SelectMany(delegate(ServersideQoLZDO store)
 			{
 				IInventory val = InventoryFor(registry, store);
@@ -4395,22 +4880,24 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			select item).ToList();
 		foreach (ServersideQoLZDO item in requestSigns.Distinct())
 		{
-			Dictionary<string, int> dictionary = DeserializeTargets(item.ZDO.GetString("ModerWarehouse.RequestTargets", string.Empty));
+			Dictionary<string, int> dictionary = DeserializeTargets(item.ZDO.GetString(RequestTargetsKey, string.Empty));
 			if (dictionary.Count == 0)
 			{
 				continue;
 			}
 			ServersideQoLZDO.ZDOVars vars = item.Vars;
 			string text = PlainText(vars.GetText("")).Trim();
-			string b = item.ZDO.GetString("ModerWarehouse.RequestRenderedText", string.Empty);
-			bool flag = text.StartsWith("SOLL ", StringComparison.OrdinalIgnoreCase) || text.StartsWith("TARGET ", StringComparison.OrdinalIgnoreCase);
+			string b = item.ZDO.GetString(RequestRenderedTextKey, string.Empty);
+			string rest;
+			bool flag = RequestPolicy.TryStripKeyword(text, WarehouseLocalization.TargetKeywords(), out rest);
 			if ((!string.Equals(text, b, StringComparison.Ordinal) && !flag) || IsStatus(text))
 			{
 				continue;
 			}
 			List<TargetStatus> list = (from x in dictionary.Select(delegate(KeyValuePair<string, int> target)
 				{
-					int current3 = items.Where((ItemData item) => ItemMatchesQuery(item, target.Key)).Sum((ItemData item) => item.m_stack);
+					string token = ChooseRequestToken(items, target.Key);
+					int current3 = ((token != null) ? items.Where((ItemData item) => item.m_shared.m_name == token && ItemMatchesQuery(item, target.Key)).Sum((ItemData item) => item.m_stack) : 0);
 					return new TargetStatus(target.Key, current3, target.Value);
 				})
 				where x.Current < x.Target
@@ -4455,13 +4942,18 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		double num5 = (double)Mathf.Clamp(ConfigBase<WarehouseConfig>.Instance.CapacityCriticalPercent.Value, ConfigBase<WarehouseConfig>.Instance.CapacityWarningPercent.Value, 100) / 100.0;
 		string text = ((num3 >= num5) ? "#ff6666" : ((num3 >= num4) ? "#ffb347" : "#80ff80"));
 		string text2 = ((num3 >= num5) ? WarehouseLocalization.Text(language, "board.expand") : (num2 + " / " + stores.Count));
+		if (_noSpace.ContainsKey(id))
+		{
+			text = "#ff6666";
+			text2 = WarehouseLocalization.Text(language, "board.no_space");
+		}
 		Dictionary<string, StockEntry> dictionary = list.ToDictionary<StockEntry, string, StockEntry>((StockEntry entry) => entry.Token, (StockEntry entry) => entry, StringComparer.Ordinal);
 		foreach (IGrouping<string, ServersideQoLZDO> item in from sign in boardSigns
-			where !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty))
-			group sign by sign.ZDO.GetString("ModerWarehouse.BoardGroup", string.Empty))
+			where !string.IsNullOrWhiteSpace(sign.ZDO.GetString(BoardGroupKey, string.Empty))
+			group sign by sign.ZDO.GetString(BoardGroupKey, string.Empty))
 		{
 			Dictionary<int, ServersideQoLZDO> dictionary2 = (from sign in item
-				group sign by sign.ZDO.GetInt("ModerWarehouse.BoardCell", -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
+				group sign by sign.ZDO.GetInt(BoardCellKey, -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
 			if (!dictionary2.TryGetValue(12, out var _))
 			{
 				item.First();
@@ -4513,11 +5005,20 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				}
 				_requestSearchNotices.Remove(id);
 			}
-			if (_deliveryNotices.TryGetValue(id, out var value4))
+			if (_noSpaceNotices.TryGetValue(id, out var value4))
 			{
 				if (WarehouseClock.UtcNow < value4.Until)
 				{
-					WriteBoardMessage(dictionary2, id, language, WarehouseLocalization.Text(language, "board.deposited"), value4.Items.Select((KeyValuePair<string, int> x) => new BoardMessage(x.Key, "+" + FormatAmount(x.Value), "#80ff80")).ToList(), text, text2);
+					WriteBoardMessage(dictionary2, id, language, WarehouseLocalization.Text(language, "board.no_space"), value4.Items.Select((KeyValuePair<string, int> x) => new BoardMessage(x.Key, "x" + FormatAmount(x.Value), "#ff6666")).ToList(), text, text2);
+					continue;
+				}
+				_noSpaceNotices.Remove(id);
+			}
+			if (_deliveryNotices.TryGetValue(id, out var value5))
+			{
+				if (WarehouseClock.UtcNow < value5.Until)
+				{
+					WriteBoardMessage(dictionary2, id, language, WarehouseLocalization.Text(language, "board.deposited"), value5.Items.Select((KeyValuePair<string, int> x) => new BoardMessage(x.Key, "+" + FormatAmount(x.Value), "#80ff80")).ToList(), text, text2);
 					continue;
 				}
 				_deliveryNotices.Remove(id);
@@ -4528,15 +5029,15 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				continue;
 			}
 			BoardControl boardControl = null;
-			if (_boardControls.TryGetValue(item.Key, out var value5))
+			if (_boardControls.TryGetValue(item.Key, out var value6))
 			{
-				if ((WarehouseClock.UtcNow - value5.ChangedAt).TotalSeconds >= 60.0)
+				if ((WarehouseClock.UtcNow - value6.ChangedAt).TotalSeconds >= 60.0)
 				{
 					_boardControls.Remove(item.Key);
 				}
 				else
 				{
-					boardControl = value5;
+					boardControl = value6;
 				}
 			}
 			List<StockEntry> list2 = list;
@@ -4545,7 +5046,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				string prefix = Normalize(boardControl.Prefix);
 				list2 = list.Where((StockEntry entry) => Normalize(entry.Name).StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
 			}
-			bool flag2 = boardControl == null && network.Count((WarehouseNode x) => x.Valid) > 1;
+			bool flag2 = boardControl == null && NetworkWarehouseIds(network).Count > 1;
 			int num7 = Math.Max(1, (list2.Count + 12 - 1) / 12) + (flag2 ? 1 : 0);
 			double num8 = Math.Max(2f, ConfigBase<WarehouseConfig>.Instance.BoardPageSeconds.Value);
 			int num9 = ((boardControl == null) ? ((int)(WarehouseClock.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num8) % num7) : Mathf.Clamp((boardControl.Page ?? 1) - 1, 0, num7 - 1));
@@ -4580,43 +5081,74 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
+	private List<string> NetworkWarehouseIds(List<WarehouseNode> network)
+	{
+		return _acceptedWarehouseIds.Concat(from x in network
+			where x.Valid
+			select x.Id).Distinct<string>(StringComparer.OrdinalIgnoreCase).OrderBy<string, string>((string id) => id, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+	}
+
 	private NetworkOverview GetNetworkOverview(string language, List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2, ContainerRegistryProcessor registry)
 	{
-		string text = WarehouseLocalization.Resolve(language) + "|" + string.Join("|", from x in network.Where((WarehouseNode x) => x.Valid).OrderBy<WarehouseNode, string>((WarehouseNode x) => x.Id, StringComparer.OrdinalIgnoreCase)
-			select x.Id.ToUpperInvariant() + ":" + x.Radius.ToString("0.###", CultureInfo.InvariantCulture) + ":" + ((object)x.Input.ZDO.GetPosition()).ToString());
+		List<string> list = NetworkWarehouseIds(network);
+		string text = WarehouseLocalization.Resolve(language) + "|" + string.Join("|", list.Select(delegate(string text2)
+		{
+			WarehouseNode warehouseNode2 = network.FirstOrDefault((WarehouseNode x) => x.Valid && x.Id.Equals(text2, StringComparison.OrdinalIgnoreCase));
+			DateTime value2;
+			return text2.ToUpperInvariant() + ":" + ((warehouseNode2 == null) ? ("remote:" + (_warehouseStockTimes.TryGetValue(text2, out value2) ? value2.Ticks : 0)) : (warehouseNode2.Radius.ToString("0.###", CultureInfo.InvariantCulture) + ":" + ((object)warehouseNode2.Input.ZDO.GetPosition()/*cast due to .constrained prefix*/).ToString()));
+		}));
 		if (_networkOverview != null && !_networkOverviewDirty && _networkOverview.Signature == text && (WarehouseClock.UtcNow - _networkOverviewAt).TotalSeconds < (double)Math.Max(3f, ConfigBase<WarehouseConfig>.Instance.ScanInterval.Value))
 		{
 			return _networkOverview;
 		}
-		List<BoardMessage> list = new List<BoardMessage>();
+		List<BoardMessage> list2 = new List<BoardMessage>();
 		int num = 0;
 		int num2 = 0;
+		bool flag = false;
 		HashSet<string> hashSet = new HashSet<string>(StringComparer.Ordinal);
-		foreach (WarehouseNode item in network.Where((WarehouseNode x) => x.Valid).OrderBy<WarehouseNode, string>((WarehouseNode x) => x.Id, StringComparer.OrdinalIgnoreCase))
+		foreach (string id in list)
 		{
-			List<ServersideQoLZDO> list2 = StoresForNode(item, containers, markerRange2, registry);
-			List<ItemData> list3 = (from x in list2.SelectMany(delegate(ServersideQoLZDO x)
-				{
-					IInventory val = InventoryFor(registry, x);
-					IEnumerable<ItemData> enumerable = ((val != null) ? val.Items : null);
-					return enumerable ?? Enumerable.Empty<ItemData>();
-				})
-				where x != null && x.m_stack > 0 && x.m_shared != null
-				select x).ToList();
-			int num3 = list3.Sum((ItemData x) => x.m_stack);
-			num += list2.Count;
-			num2 += num3;
-			foreach (ItemData item2 in list3)
+			WarehouseNode warehouseNode = network.FirstOrDefault((WarehouseNode x) => x.Valid && x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+			if (warehouseNode != null)
 			{
-				hashSet.Add(item2.m_shared.m_name);
+				List<ServersideQoLZDO> list3 = StoresForNode(warehouseNode, containers, markerRange2, registry);
+				List<ItemData> list4 = (from x in list3.SelectMany(delegate(ServersideQoLZDO x)
+					{
+						IInventory obj = InventoryFor(registry, x);
+						IEnumerable<ItemData> enumerable = ((obj != null) ? obj.Items : null);
+						return enumerable ?? Enumerable.Empty<ItemData>();
+					})
+					where x != null && x.m_stack > 0 && x.m_shared != null
+					select x).ToList();
+				int num3 = list4.Sum((ItemData x) => x.m_stack);
+				num += list3.Count;
+				num2 += num3;
+				foreach (ItemData item in list4)
+				{
+					hashSet.Add(item.m_shared.m_name);
+				}
+				list2.Add(new BoardMessage(id.ToUpperInvariant(), $"{FormatAmount(num3)} / {list3.Count}K", "#80ffff"));
+				continue;
 			}
-			list.Add(new BoardMessage(item.Id.ToUpperInvariant(), $"{FormatAmount(num3)} / {list2.Count}K", "#80ffff"));
+			flag = true;
+			int num4 = 0;
+			if (_warehouseStockSnapshots.TryGetValue(id, out var value))
+			{
+				foreach (KeyValuePair<string, int> item2 in value)
+				{
+					num4 += item2.Value;
+					hashSet.Add(item2.Key);
+				}
+			}
+			num2 += num4;
+			list2.Add(new BoardMessage(id.ToUpperInvariant(), FormatAmount(num4) + " / ?K", "#8090a0"));
 		}
-		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.warehouses"), network.Count((WarehouseNode x) => x.Valid).ToString(CultureInfo.InvariantCulture), "#80ff80"));
-		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.chests_world"), num.ToString(CultureInfo.InvariantCulture), "#80ff80"));
-		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.stock_world"), FormatAmount(num2), "#80ff80"));
-		list.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.types_world"), hashSet.Count.ToString(CultureInfo.InvariantCulture), "#80ff80"));
-		_networkOverview = new NetworkOverview(text, list);
+		list2.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.warehouses"), list.Count.ToString(CultureInfo.InvariantCulture), "#80ff80"));
+		list2.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.chests_world"), num.ToString(CultureInfo.InvariantCulture) + (flag ? "+" : string.Empty), "#80ff80"));
+		list2.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.stock_world"), FormatAmount(num2), "#80ff80"));
+		list2.Add(new BoardMessage(WarehouseLocalization.Text(language, "network.types_world"), hashSet.Count.ToString(CultureInfo.InvariantCulture), "#80ff80"));
+		_networkOverview = new NetworkOverview(text, list2);
 		_networkOverviewAt = WarehouseClock.UtcNow;
 		_networkOverviewDirty = false;
 		return _networkOverview;
@@ -4625,12 +5157,12 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 	private void WriteStatisticsBoard(string id, string language, IEnumerable<ServersideQoLZDO> statsSigns, WarehouseStatsHistory history, List<ServersideQoLZDO> stores, ContainerRegistryProcessor registry, IReadOnlyList<Peer> peers, List<WarehouseNode> network, List<ServersideQoLZDO> containers, float markerRange2)
 	{
 		foreach (IGrouping<string, ServersideQoLZDO> item in from x in statsSigns
-			where !string.IsNullOrWhiteSpace(x.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty))
-			group x by x.ZDO.GetString("ModerWarehouse.StatsGroup", string.Empty))
+			where !string.IsNullOrWhiteSpace(x.ZDO.GetString(StatsGroupKey, string.Empty))
+			group x by x.ZDO.GetString(StatsGroupKey, string.Empty))
 		{
 			Dictionary<int, ServersideQoLZDO> dictionary = (from x in item
-				group x by x.ZDO.GetInt("ModerWarehouse.StatsCell", -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
-			if (!dictionary.TryGetValue(12, out var value))
+				group x by x.ZDO.GetInt(StatsCellKey, -1)).ToDictionary((IGrouping<int, ServersideQoLZDO> x) => x.Key, (IGrouping<int, ServersideQoLZDO> x) => x.First());
+			if (!dictionary.TryGetValue(12, out var _))
 			{
 				continue;
 			}
@@ -4654,7 +5186,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 				WriteBoardCell(dictionary, 1, "<color=#8090a0>" + WarehouseLocalization.Text(language, "board.display_sleeping"));
 				WriteBoardCell(dictionary, 2, "<color=white>" + WarehouseLocalization.Format(language, "board.wake", distance.ToString("0.#", CultureInfo.InvariantCulture)));
-				WriteBoardCell(dictionary, 3, "<color=#8090a0>90 " + WarehouseLocalization.Text(language, "stats.days_short"));
+				WriteBoardCell(dictionary, 3, "<color=#8090a0>" + 365 + " " + WarehouseLocalization.Text(language, "stats.days_short"));
 				SleepDisplayPolicy.Layout layout = SleepDisplayPolicy.Create(WarehouseLocalization.Text(language, "stats.sleep_word"), 12);
 				for (int num2 = 0; num2 < 12; num2++)
 				{
@@ -4664,26 +5196,22 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				continue;
 			}
 			double num3 = Math.Max(3f, ConfigBase<WarehouseConfig>.Instance.BoardPageSeconds.Value);
-			int num4 = ((network.Count((WarehouseNode x) => x.Valid) > 1) ? 5 : 4);
+			int num4 = ((NetworkWarehouseIds(network).Count > 1) ? 5 : 4);
 			int num5 = ((statsControl != null && statsControl.Page.HasValue) ? (statsControl.Page.Value - 1) : ((int)(WarehouseClock.UtcNow.Subtract(new DateTime(1970, 1, 1)).TotalSeconds / num3) % num4));
-			int num6 = statsControl?.Days ?? (num5 switch
+			int selectedDays = statsControl?.Days ?? (num5 switch
 			{
-				3 => 90, 
+				3 => 365, 
 				0 => 1, 
 				_ => 30, 
 			});
-			int selectedDays = num6;
-			Dictionary<int, ServersideQoLZDO> cells = dictionary;
-			string text = WarehouseLocalization.Text(language, "stats.period");
-			string text2 = ((statsControl == null || !statsControl.Days.HasValue) ? (num5 switch
+			WriteBoardCell(dictionary, 1, "<color=white>" + WarehouseLocalization.Text(language, "stats.period") + "\n" + ((statsControl != null && statsControl.Days.HasValue) ? WarehouseLocalization.Format(language, "stats.days", selectedDays) : (num5 switch
 			{
-				1 => "7 / 30 / 90", 
+				1 => "7 / 30 / " + 365, 
 				0 => WarehouseLocalization.Text(language, "stats.today"), 
 				_ => WarehouseLocalization.Format(language, "stats.days", selectedDays), 
-			}) : WarehouseLocalization.Format(language, "stats.days", selectedDays));
-			WriteBoardCell(cells, 1, "<color=white>" + text + "\n" + text2);
+			})));
 			WriteBoardCell(dictionary, 2, string.Format("<color=white>{0}\n{1} / {2}", WarehouseLocalization.Text(language, "board.page"), num5 + 1, num4));
-			WriteBoardCell(dictionary, 3, "<color=white>" + WarehouseLocalization.Text(language, "stats.tracked_since") + "\n" + DayLabel(history.FirstDayKey));
+			WriteBoardCell(dictionary, 3, "<color=white>" + WarehouseLocalization.Text(language, "stats.tracked_since") + "\n" + DayLabel(history.StartDayKey, fullYear: true));
 			List<WarehouseStatsHistory.Day> source = history.Window(selectedDays);
 			Dictionary<string, int> incoming = history.SumItems(selectedDays, input: true);
 			Dictionary<string, int> outgoing = history.SumItems(selectedDays, input: false);
@@ -4692,48 +5220,48 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			{
 			case 0:
 			{
-				int num7 = source.Sum((WarehouseStatsHistory.Day x) => x.Input);
-				int num8 = source.Sum((WarehouseStatsHistory.Day x) => x.Output);
+				int num10 = source.Sum((WarehouseStatsHistory.Day x) => x.Input);
+				int num11 = source.Sum((WarehouseStatsHistory.Day x) => x.Output);
 				int amount = history.CurrentStock.Values.Sum();
-				int num9 = stores.Count(delegate(ServersideQoLZDO x)
+				int num12 = stores.Count(delegate(ServersideQoLZDO x)
 				{
-					IInventory val = InventoryFor(registry, x);
-					return val != null && val.Items.Any((ItemData i) => i != null && i.m_stack > 0);
+					IInventory obj = InventoryFor(registry, x);
+					return obj != null && obj.Items.Any((ItemData i) => i != null && i.m_stack > 0);
 				});
-				double num10 = ((stores.Count == 0) ? 0.0 : (100.0 * (double)num9 / (double)stores.Count));
-				list.Add(Metric(language, "stats.input", FormatAmount(num7), "#80ff80"));
-				list.Add(Metric(language, "stats.output", FormatAmount(num8), "#ffb347"));
-				list.Add(SignedMetric(language, "stats.balance", num7 - num8));
-				list.Add(Metric(language, "stats.per_day", FormatAmount(num7 + num8), "#80ffff"));
+				double num13 = ((stores.Count == 0) ? 0.0 : (100.0 * (double)num12 / (double)stores.Count));
+				list.Add(Metric(language, "stats.input", FormatAmount(num10), "#80ff80"));
+				list.Add(Metric(language, "stats.output", FormatAmount(num11), "#ffb347"));
+				list.Add(SignedMetric(language, "stats.balance", num10 - num11));
+				list.Add(Metric(language, "stats.per_day", FormatAmount(num10 + num11), "#80ffff"));
 				list.Add(ItemMessage(language, "stats.top_input", incoming, "#80ff80"));
 				list.Add(ItemMessage(language, "stats.top_output", outgoing, "#ffb347"));
 				list.Add(Metric(language, "stats.current", FormatAmount(amount), "#80ffff"));
 				list.Add(Metric(language, "stats.item_types", history.CurrentStock.Count.ToString(), "white"));
-				list.Add(Metric(language, "stats.chests_now", num9 + " / " + stores.Count, "white"));
-				list.Add(Metric(language, "stats.avg_use", num10.ToString("0", CultureInfo.InvariantCulture) + "%", "#80ffff"));
-				string value3 = ((num8 > 0) ? ((double)num7 / (double)num8).ToString("0.00", CultureInfo.InvariantCulture) : ((num7 > 0) ? "∞" : "-"));
-				list.Add(Metric(language, "stats.ratio", value3, "#80ffff"));
+				list.Add(Metric(language, "stats.chests_now", num12 + " / " + stores.Count, "white"));
+				list.Add(Metric(language, "stats.avg_use", num13.ToString("0", CultureInfo.InvariantCulture) + "%", "#80ffff"));
+				string value4 = ((num11 > 0) ? ((double)num10 / (double)num11).ToString("0.00", CultureInfo.InvariantCulture) : ((num10 > 0) ? "∞" : "-"));
+				list.Add(Metric(language, "stats.ratio", value4, "#80ffff"));
 				list.Add(Metric(language, "stats.days_tracked", history.TrackedDays.ToString(), "white"));
 				break;
 			}
 			case 1:
 			{
-				int[] array = ((statsControl != null && statsControl.Days.HasValue) ? new int[3]
+				int[] array = ((statsControl == null || !statsControl.Days.HasValue) ? new int[3] { 7, 30, 365 } : new int[3]
 				{
 					selectedDays,
 					-selectedDays,
-					90
-				} : new int[3] { 7, 30, 90 });
-				foreach (int num11 in array)
+					365
+				});
+				foreach (int num7 in array)
 				{
-					List<WarehouseStatsHistory.Day> source2 = ((num11 < 0) ? history.PreviousWindow(-num11) : history.Window(num11));
-					int num12 = source2.Sum((WarehouseStatsHistory.Day x) => x.Input);
-					int num13 = source2.Sum((WarehouseStatsHistory.Day x) => x.Output);
-					string value4 = ((num11 < 0) ? WarehouseLocalization.Text(language, "stats.previous") : WarehouseLocalization.Format(language, "stats.days", num11));
-					list.Add(Metric(language, "stats.period", value4, "white"));
-					list.Add(Metric(language, "stats.input", FormatAmount(num12), "#80ff80"));
-					list.Add(Metric(language, "stats.output", FormatAmount(num13), "#ffb347"));
-					list.Add(SignedMetric(language, "stats.balance", num12 - num13));
+					List<WarehouseStatsHistory.Day> source2 = ((num7 < 0) ? history.PreviousWindow(-num7) : history.Window(num7));
+					int num8 = source2.Sum((WarehouseStatsHistory.Day x) => x.Input);
+					int num9 = source2.Sum((WarehouseStatsHistory.Day x) => x.Output);
+					string value3 = ((num7 < 0) ? WarehouseLocalization.Text(language, "stats.previous") : WarehouseLocalization.Format(language, "stats.days", num7));
+					list.Add(Metric(language, "stats.period", value3, "white"));
+					list.Add(Metric(language, "stats.input", FormatAmount(num8), "#80ff80"));
+					list.Add(Metric(language, "stats.output", FormatAmount(num9), "#ffb347"));
+					list.Add(SignedMetric(language, "stats.balance", num8 - num9));
 				}
 				break;
 			}
@@ -4742,51 +5270,22 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				int value6;
 				int value7;
 				Dictionary<string, int> dictionary2 = incoming.Keys.Union(outgoing.Keys).ToDictionary((string k) => k, (string k) => (incoming.TryGetValue(k, out value6) ? value6 : 0) - (outgoing.TryGetValue(k, out value7) ? value7 : 0));
-				List<KeyValuePair<string, int>> values = dictionary2.Where(delegate(KeyValuePair<string, int> x)
-				{
-					KeyValuePair<string, int> keyValuePair3 = x;
-					return keyValuePair3.Value > 0;
-				}).OrderByDescending(delegate(KeyValuePair<string, int> x)
-				{
-					KeyValuePair<string, int> keyValuePair3 = x;
-					return keyValuePair3.Value;
-				}).Take(2)
-					.ToList();
-				List<KeyValuePair<string, int>> values2 = dictionary2.Where(delegate(KeyValuePair<string, int> x)
-				{
-					KeyValuePair<string, int> keyValuePair3 = x;
-					return keyValuePair3.Value < 0;
-				}).OrderBy(delegate(KeyValuePair<string, int> x)
-				{
-					KeyValuePair<string, int> keyValuePair3 = x;
-					return keyValuePair3.Value;
-				}).Take(2)
-					.ToList();
+				List<KeyValuePair<string, int>> values = (from x in dictionary2
+					where x.Value > 0
+					orderby x.Value descending
+					select x).Take(2).ToList();
+				List<KeyValuePair<string, int>> values2 = (from x in dictionary2
+					where x.Value < 0
+					orderby x.Value
+					select x).Take(2).ToList();
 				bool flag = history.TrackedDays >= Math.Min(7, selectedDays);
-				var anon = (from x in (flag ? dictionary2 : new Dictionary<string, int>()).Where(delegate(KeyValuePair<string, int> x)
+				var anon = (from x in flag ? dictionary2 : new Dictionary<string, int>()
+					where x.Value < 0 && history.CurrentStock.ContainsKey(x.Key)
+					select new
 					{
-						KeyValuePair<string, int> keyValuePair3 = x;
-						if (keyValuePair3.Value < 0)
-						{
-							Dictionary<string, int> currentStock = history.CurrentStock;
-							keyValuePair3 = x;
-							return currentStock.ContainsKey(keyValuePair3.Key);
-						}
-						return false;
-					}).Select(delegate(KeyValuePair<string, int> x)
-					{
-						KeyValuePair<string, int> keyValuePair3 = x;
-						string key = keyValuePair3.Key;
-						Dictionary<string, int> currentStock = history.CurrentStock;
-						keyValuePair3 = x;
-						double num16 = (double)currentStock[keyValuePair3.Key] * (double)selectedDays;
-						keyValuePair3 = x;
-						return new
-						{
-							Key = key,
-							Days = num16 / (double)(-keyValuePair3.Value)
-						};
-					})
+						Key = x.Key,
+						Days = (double)history.CurrentStock[x.Key] * (double)selectedDays / (double)(-x.Value)
+					} into x
 					orderby x.Days
 					select x).FirstOrDefault();
 				list.Add(TokenAt(language, "stats.rising", values, 0, "#80ff80"));
@@ -4799,10 +5298,13 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				List<WarehouseStatsHistory.Day> source4 = history.PreviousWindow(selectedDays);
 				list.Add(Metric(language, "stats.input_change", PercentChange(language, source3.Sum((WarehouseStatsHistory.Day x) => x.Input), source4.Sum((WarehouseStatsHistory.Day x) => x.Input)), "#80ffff"));
 				list.Add(Metric(language, "stats.output_change", PercentChange(language, source3.Sum((WarehouseStatsHistory.Day x) => x.Output), source4.Sum((WarehouseStatsHistory.Day x) => x.Output)), "#80ffff"));
-				list.Add(ItemMessage(language, "stats.top_input", incoming, "#80ff80"));
-				list.Add(ItemMessage(language, "stats.top_output", outgoing, "#ffb347"));
-				string text3 = Math.Min(history.TrackedDays, selectedDays) + " / " + selectedDays + " d";
-				list.Add(Metric(language, "stats.confidence", flag ? text3 : (WarehouseLocalization.Text(language, "stats.not_enough") + " " + text3), flag ? "#80ff80" : "#ffb347"));
+				double chestsPerDay;
+				double daysToFull;
+				bool flag2 = history.TryCapacityForecast(Math.Max(selectedDays, 7), out chestsPerDay, out daysToFull);
+				list.Add(Metric(language, "stats.chest_trend", (!flag2) ? "-" : (((chestsPerDay * 7.0 >= 0.0) ? "+" : string.Empty) + (chestsPerDay * 7.0).ToString("0.#", CultureInfo.InvariantCulture) + " / " + WarehouseLocalization.Text(language, "stats.week")), (chestsPerDay > 0.0) ? "#ffb347" : "#80ff80"));
+				list.Add(Metric(language, "stats.full_in", (!flag2) ? WarehouseLocalization.Text(language, "stats.not_enough") : (double.IsInfinity(daysToFull) ? "-" : ((daysToFull <= 0.0) ? WarehouseLocalization.Text(language, "board.expand") : (daysToFull.ToString("0", CultureInfo.InvariantCulture) + " d"))), (!flag2 || double.IsInfinity(daysToFull)) ? "#80ff80" : ((daysToFull < 14.0) ? "#ff6666" : "#ffb347")));
+				string text = Math.Min(history.TrackedDays, selectedDays) + " / " + selectedDays + " d";
+				list.Add(Metric(language, "stats.confidence", flag ? text : (WarehouseLocalization.Text(language, "stats.not_enough") + " " + text), flag ? "#80ff80" : "#ffb347"));
 				list.Add(Metric(language, "stats.net_day", FormatSignedAmount((source.Sum((WarehouseStatsHistory.Day x) => x.Input) - source.Sum((WarehouseStatsHistory.Day x) => x.Output)) / Math.Max(1, selectedDays)), "white"));
 				break;
 			}
@@ -4845,21 +5347,21 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 				BoardMessage boardMessage = list[num14];
 				WriteBoardCell(dictionary, num14 + 4, "<color=white>" + boardMessage.Name + "\n<color=" + boardMessage.Color + ">" + boardMessage.Value);
 			}
-			if (dictionary.TryGetValue(-2, out value))
+			if (dictionary.TryGetValue(-2, out var _))
 			{
-				string text4;
+				string text2;
 				if (statsControl == null)
 				{
-					text4 = "<color=#80ffff>" + WarehouseLocalization.Text(language, "stats.control") + "\n<color=white>E: 1-90 AUTO";
+					text2 = "<color=#80ffff>" + WarehouseLocalization.Text(language, "stats.control") + "\n<color=white>E: 1-" + 365 + " AUTO";
 				}
 				else
 				{
 					int num15 = Math.Max(0, 60 - (int)(WarehouseClock.UtcNow - statsControl.ChangedAt).TotalSeconds);
-					string text5 = (statsControl.Days.HasValue ? WarehouseLocalization.Format(language, "stats.days", statsControl.Days.Value) : WarehouseLocalization.Text(language, "common.auto"));
-					string text6 = (statsControl.Page.HasValue ? WarehouseLocalization.Text(language, "stats.page_" + statsControl.Page.Value) : WarehouseLocalization.Text(language, "common.auto"));
-					text4 = "<color=#ffb347>" + WarehouseLocalization.Text(language, "stats.manual") + "\n<color=white>" + text5 + " · " + text6 + "\n" + WarehouseLocalization.Format(language, "stats.auto_in", num15);
+					string text3 = (statsControl.Days.HasValue ? WarehouseLocalization.Format(language, "stats.days", statsControl.Days.Value) : WarehouseLocalization.Text(language, "common.auto"));
+					string text4 = (statsControl.Page.HasValue ? WarehouseLocalization.Text(language, "stats.page_" + statsControl.Page.Value) : WarehouseLocalization.Text(language, "common.auto"));
+					text2 = "<color=#ffb347>" + WarehouseLocalization.Text(language, "stats.manual") + "\n<color=white>" + text3 + " · " + text4 + "\n" + WarehouseLocalization.Format(language, "stats.auto_in", num15);
 				}
-				WriteBoardCell(dictionary, -2, text4);
+				WriteBoardCell(dictionary, -2, text2);
 			}
 		}
 	}
@@ -4873,13 +5375,11 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void CaptureStatsControl(string group, Dictionary<int, ServersideQoLZDO> cells, int cell, bool allowDays, bool allowPage)
 	{
-		//IL_0029: Unknown result type (might be due to invalid IL or missing references)
-		//IL_002e: Unknown result type (might be due to invalid IL or missing references)
 		if (!cells.TryGetValue(cell, out var value))
 		{
 			return;
 		}
-		string text = value.ZDO.GetString("ModerWarehouse.BoardRenderedText", string.Empty);
+		string text = value.ZDO.GetString(BoardRenderedTextKey, string.Empty);
 		ServersideQoLZDO.ZDOVars vars = value.Vars;
 		string text2 = PlainText(vars.GetText("")).Trim();
 		if (string.IsNullOrEmpty(text) || string.Equals(text2, text, StringComparison.Ordinal))
@@ -4905,7 +5405,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			select x).ToList();
 		if (allowDays)
 		{
-			int num = list.FirstOrDefault((int x) => x >= 1 && x <= 90);
+			int num = list.FirstOrDefault((int x) => x >= 1 && x <= 365);
 			if (num > 0)
 			{
 				value2.Days = num;
@@ -4984,9 +5484,9 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		return ((num > 0.0) ? "+" : string.Empty) + num.ToString("0", CultureInfo.InvariantCulture) + "%";
 	}
 
-	internal static string DayLabel(int key)
+	internal static string DayLabel(int key, bool fullYear = false)
 	{
-		return (key % 100).ToString("00", CultureInfo.InvariantCulture) + "." + (key / 100 % 100).ToString("00", CultureInfo.InvariantCulture) + ".";
+		return (key % 100).ToString("00", CultureInfo.InvariantCulture) + "." + (key / 100 % 100).ToString("00", CultureInfo.InvariantCulture) + "." + (fullYear ? (key / 10000).ToString(CultureInfo.InvariantCulture) : (key / 10000 % 100).ToString("00", CultureInfo.InvariantCulture));
 	}
 
 	private static BoardMessage ItemMessage(string language, string key, Dictionary<string, int> values, string color)
@@ -5074,10 +5574,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static void WriteBoardCell(Dictionary<int, ServersideQoLZDO> cells, int cell, string text)
 	{
-		//IL_000d: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0012: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0037: Unknown result type (might be due to invalid IL or missing references)
-		//IL_003c: Unknown result type (might be due to invalid IL or missing references)
 		if (!cells.TryGetValue(cell, out var value))
 		{
 			return;
@@ -5091,7 +5587,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			}
 			vars = value.Vars;
 			vars.SetText(text);
-			value.ZDO.Set("ModerWarehouse.BoardRenderedText", PlainText(text).Trim());
+			value.ZDO.Set(BoardRenderedTextKey, PlainText(text).Trim());
 		}
 	}
 
@@ -5128,10 +5624,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private void WriteWarehouseInfo(string id, string language, IEnumerable<ServersideQoLZDO> infoSigns, List<ServersideQoLZDO> stores, Dictionary<ServersideQoLZDO, string> labels, ContainerRegistryProcessor registry)
 	{
-		//IL_0156: Unknown result type (might be due to invalid IL or missing references)
-		//IL_015b: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0184: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0189: Unknown result type (might be due to invalid IL or missing references)
 		int num = 0;
 		int num2 = 0;
 		foreach (ServersideQoLZDO store in stores)
@@ -5168,34 +5660,29 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static bool IsRememberedRequest(ServersideQoLZDO sign)
 	{
-		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.RequestWarehouse", string.Empty));
+		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString(RequestWarehouseKey, string.Empty));
 	}
 
 	private static bool IsRememberedInfo(ServersideQoLZDO sign)
 	{
-		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.InfoWarehouse", string.Empty));
+		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString(InfoWarehouseKey, string.Empty));
 	}
 
 	private static bool IsRememberedBoard(ServersideQoLZDO sign)
 	{
-		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.BoardWarehouse", string.Empty));
+		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString(BoardWarehouseKey, string.Empty));
 	}
 
 	private static bool IsRememberedStats(ServersideQoLZDO sign)
 	{
-		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString("ModerWarehouse.StatsWarehouse", string.Empty));
+		return !string.IsNullOrWhiteSpace(sign.ZDO.GetString(StatsWarehouseKey, string.Empty));
 	}
 
 	private ServersideQoLZDO LinkedOrNearestContainer(ServersideQoLZDO sign, List<ServersideQoLZDO> containers, float range2)
 	{
-		//IL_005c: Unknown result type (might be due to invalid IL or missing references)
-		//IL_008f: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0094: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0095: Unknown result type (might be due to invalid IL or missing references)
-		//IL_009a: Unknown result type (might be due to invalid IL or missing references)
-		float num = sign.ZDO.GetFloat("ModerWarehouse.AutoChestX", float.NaN);
-		float num2 = sign.ZDO.GetFloat("ModerWarehouse.AutoChestY", float.NaN);
-		float num3 = sign.ZDO.GetFloat("ModerWarehouse.AutoChestZ", float.NaN);
+		float num = sign.ZDO.GetFloat(AutoChestXKey, float.NaN);
+		float num2 = sign.ZDO.GetFloat(AutoChestYKey, float.NaN);
+		float num3 = sign.ZDO.GetFloat(AutoChestZKey, float.NaN);
 		if (!float.IsNaN(num) && !float.IsNaN(num2) && !float.IsNaN(num3))
 		{
 			Vector3 val = default(Vector3);
@@ -5221,53 +5708,83 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		{
 			return string.Equals(value, b, StringComparison.Ordinal);
 		}
-		string normalized = Normalize(label);
-		if (!ItemAliases(item).Any((string alias) => alias == normalized))
+		if (TryLabelCategory(label, out var category))
+		{
+			if (category != WarehouseCategories.Category.Misc)
+			{
+				return InCategory(item, category);
+			}
+			return false;
+		}
+		if (!WarehouseText.LabelNamesItem(label, ItemAliases(item), (string alias) => AliasOwners.TryGetValue(alias, out var value2) && value2.Count > 1, out var needsSample))
 		{
 			return false;
 		}
-		if (AliasOwners.TryGetValue(normalized, out var value2) && value2.Count > 1)
+		if (needsSample)
 		{
 			return HasItem(InventoryFor(registry, chest), item);
 		}
 		return true;
 	}
 
-	private static bool ItemMatchesQuery(ItemData item, string query)
+	private static bool TryLabelCategory(string label, out WarehouseCategories.Category category)
 	{
-		string normalized = Normalize(query);
-		return ItemAliases(item).Any((string alias) => alias == normalized);
+		category = WarehouseCategories.Category.None;
+		if (!string.IsNullOrEmpty(label) && label.IndexOf("\u001f", StringComparison.Ordinal) < 0)
+		{
+			return WarehouseCategories.TryParse(Normalize(label), out category);
+		}
+		return false;
 	}
 
-	private static IEnumerable<string> ItemAliases(ItemData item)
+	private static bool InCategory(ItemData item, WarehouseCategories.Category category)
 	{
-		string prefab = Normalize(ItemName(item));
-		string token = Normalize(item?.m_shared?.m_name?.Replace("$item_", string.Empty));
-		if (prefab.Length > 0)
+		if (item?.m_shared != null)
 		{
-			yield return prefab;
+			return WarehouseCategories.Contains(category, item.m_shared.m_name, item.m_shared.m_itemType.ToString(), item.m_shared.m_food, item.m_shared.m_foodStamina);
 		}
-		if (token.Length > 0 && token != prefab)
+		return false;
+	}
+
+	private bool IsMiscChest(ServersideQoLZDO chest, Dictionary<ServersideQoLZDO, string> labels)
+	{
+		if (!_labelItemTokens.ContainsKey(chest) && labels.TryGetValue(chest, out var value) && TryLabelCategory(value, out var category))
 		{
-			yield return token;
+			return category == WarehouseCategories.Category.Misc;
 		}
-		if (item?.m_shared != null && EnglishNames.TryGetValue(item.m_shared.m_name, out var value) && value.Length > 0)
+		return false;
+	}
+
+	private static string LabelForLog(string label)
+	{
+		return PlainText(label ?? string.Empty).Replace("\u001f", " + ").Trim();
+	}
+
+	private static bool ItemMatchesQuery(ItemData item, string query)
+	{
+		return Array.IndexOf(ItemAliases(item), Normalize(query)) >= 0;
+	}
+
+	private static string[] ItemAliases(ItemData item)
+	{
+		string text = ItemName(item);
+		string text2 = item?.m_shared?.m_name ?? string.Empty;
+		string key = text + "\u0001" + text2;
+		if (AliasCache.TryGetValue(key, out var value))
 		{
-			yield return value;
+			return value;
 		}
-		if (item?.m_shared != null && GermanNames.TryGetValue(item.m_shared.m_name, out value) && value.Length > 0)
-		{
-			yield return value;
-		}
-		foreach (string item2 in GermanAliases(prefab).Concat(GermanAliases(token)).Distinct())
-		{
-			yield return item2;
-		}
+		string value2;
+		string englishNormalized = ((text2.Length > 0 && EnglishNames.TryGetValue(text2, out value2)) ? value2 : null);
+		string value3;
+		string germanNormalized = ((text2.Length > 0 && GermanNames.TryGetValue(text2, out value3)) ? value3 : null);
+		string[] array = WarehouseText.BuildAliases(text, text2, englishNormalized, germanNormalized);
+		AliasCache[key] = array;
+		return array;
 	}
 
 	private static void LoadGermanNames()
 	{
-		//IL_000c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0017: Expected O, but got Unknown
 		if (_germanNamesLoaded || (UnityEngine.Object)ObjectDB.instance == (UnityEngine.Object)null)
 		{
@@ -5284,6 +5801,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			instance.SetLanguage("German");
 			CaptureLocalizedNames(instance, GermanNames, GermanDisplayNames);
 			CapturePieceNames(instance, PieceGermanNames);
+			AliasCache.Clear();
 			BuildAliasOwners();
 			File.WriteAllLines(Path.Combine(Paths.ConfigPath, "ModerWarehouse-items-en-de.tsv"), new string[1] { "Prefab\tToken\tEnglish\tDeutsch" }.Concat(from token in GermanNames.Keys
 				orderby token
@@ -5297,7 +5815,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static void CaptureLocalizedNames(Localization localization, Dictionary<string, string> destination, Dictionary<string, string> displayNames)
 	{
-		//IL_001b: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0026: Expected O, but got Unknown
 		foreach (GameObject item in ObjectDB.instance.m_items)
 		{
@@ -5326,7 +5843,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static void BuildAliasOwners()
 	{
-		//IL_0028: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0033: Expected O, but got Unknown
 		AliasOwners.Clear();
 		foreach (GameObject item in ObjectDB.instance.m_items)
@@ -5351,237 +5867,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	internal static IEnumerable<string> GermanAliases(string name)
-	{
-		if (name == null)
-		{
-			yield break;
-		}
-		switch (name.Length)
-		{
-		default:
-			yield break;
-		case 6:
-		{
-			char c3 = name[0];
-			if (c3 != 'b')
-			{
-				if (c3 != 'c')
-				{
-					if (c3 != 's' || !(name == "silver"))
-					{
-						yield break;
-					}
-					goto IL_0545;
-				}
-				if (!(name == "copper"))
-				{
-					yield break;
-				}
-				goto IL_059b;
-			}
-			if (name == "bronze")
-			{
-				yield return "bronze";
-				yield return "bronzebarren";
-			}
-			yield break;
-		}
-		case 9:
-		{
-			char c = name[1];
-			if (c != 'c')
-			{
-				if (c != 'i')
-				{
-					if (c != 'o' || !(name == "copperore"))
-					{
-						yield break;
-					}
-					goto IL_059b;
-				}
-				if (!(name == "silverore"))
-				{
-					yield break;
-				}
-				goto IL_0545;
-			}
-			if (!(name == "scrapiron"))
-			{
-				yield break;
-			}
-			goto IL_04ef;
-		}
-		case 4:
-			switch (name[0])
-			{
-			default:
-				yield break;
-			case 'w':
-				if (name == "wood")
-				{
-					yield return "holz";
-				}
-				yield break;
-			case 'c':
-				if (name == "coal")
-				{
-					yield return "kohle";
-				}
-				yield break;
-			case 'i':
-				break;
-			}
-			if (!(name == "iron"))
-			{
-				yield break;
-			}
-			goto IL_04ef;
-		case 7:
-		{
-			char c2 = name[0];
-			if (c2 != 'f')
-			{
-				switch (c2)
-				{
-				default:
-					yield break;
-				case 't':
-					if (name == "thistle")
-					{
-						yield return "distel";
-					}
-					yield break;
-				case 'i':
-					break;
-				}
-				if (!(name == "ironore"))
-				{
-					yield break;
-				}
-				goto IL_04ef;
-			}
-			if (!(name == "feather"))
-			{
-				yield break;
-			}
-			break;
-		}
-		case 8:
-		{
-			char c4 = name[2];
-			if ((uint)c4 <= 110u)
-			{
-				switch (c4)
-				{
-				default:
-					yield break;
-				case 'n':
-					if (name == "finewood")
-					{
-						yield return "edelholz";
-					}
-					yield break;
-				case 'a':
-					break;
-				}
-				if (!(name == "feathers"))
-				{
-					yield break;
-				}
-				break;
-			}
-			switch (c4)
-			{
-			default:
-				yield break;
-			case 'u':
-				if (!(name == "roundlog"))
-				{
-					yield break;
-				}
-				break;
-			case 'r':
-				if (!(name == "corewood"))
-				{
-					yield break;
-				}
-				break;
-			}
-			yield return "kernholz";
-			yield break;
-		}
-		case 5:
-			switch (name[0])
-			{
-			case 's':
-				if (name == "stone")
-				{
-					yield return "stein";
-				}
-				break;
-			case 'r':
-				if (name == "resin")
-				{
-					yield return "harz";
-				}
-				break;
-			}
-			yield break;
-		case 3:
-			if (name == "tin")
-			{
-				yield return "zinn";
-				yield return "zinnbarren";
-			}
-			yield break;
-		case 10:
-			if (!(name == "blackmetal"))
-			{
-				yield break;
-			}
-			goto IL_04b5;
-		case 15:
-			if (!(name == "blackmetalscrap"))
-			{
-				yield break;
-			}
-			goto IL_04b5;
-		case 11:
-			{
-				if (name == "ancientbark")
-				{
-					yield return "uralteborke";
-				}
-				yield break;
-			}
-			IL_04b5:
-			yield return "schwarzmetall";
-			yield return "schwarzmetallbarren";
-			yield break;
-			IL_04ef:
-			yield return "eisen";
-			yield return "eisenbarren";
-			yield return "altmetall";
-			yield break;
-			IL_0545:
-			yield return "silber";
-			yield return "silbererz";
-			yield return "silberbarren";
-			yield break;
-			IL_059b:
-			yield return "kupfer";
-			yield return "kupfererz";
-			yield return "kupferbarren";
-			yield break;
-		}
-		yield return "feder";
-		yield return "federn";
-	}
-
 	private static string ItemName(ItemData item)
 	{
-		//IL_000c: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0017: Expected O, but got Unknown
 		object obj;
 		if (!((UnityEngine.Object)(item?.m_dropPrefab) != (UnityEngine.Object)null))
@@ -5601,16 +5888,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	internal static string Normalize(string value)
 	{
-		StringBuilder stringBuilder = new StringBuilder();
-		string text = Regex.Replace(value ?? string.Empty, "<.*?>", string.Empty).ToLowerInvariant();
-		foreach (char c in text)
-		{
-			if (char.IsLetterOrDigit(c))
-			{
-				stringBuilder.Append(c);
-			}
-		}
-		return stringBuilder.ToString();
+		return WarehouseText.Normalize(value);
 	}
 
 	private static readonly FieldInfo ObjectsByIdField = typeof(ZDOMan).GetField("m_objectsByID", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -5715,9 +5993,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static bool IsSignObject(ZDO zdo)
 	{
-		//IL_0035: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0040: Expected O, but got Unknown
-		//IL_004a: Unknown result type (might be due to invalid IL or missing references)
 		//IL_0055: Expected O, but got Unknown
 		int prefab = zdo.GetPrefab();
 		if (SignPrefabs.TryGetValue(prefab, out var value))
@@ -5736,7 +6012,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	internal static string PlainText(string value)
 	{
-		return Regex.Replace(value ?? string.Empty, "<.*?>", string.Empty);
+		return WarehouseText.PlainText(value);
 	}
 
 	// Local patch 9: ServersideQoL ContainerSigns writes a chest's contents between these markers.
@@ -5849,6 +6125,10 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static bool Own(ContainerState state)
 	{
+		if (((state != null) ? state.ZDO : null) == null)
+		{
+			return false;
+		}
 		if (state.ZDO.IsOwnerOrUnassigned())
 		{
 			return true;
@@ -5976,7 +6256,7 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		if (elapsedMs >= 50 && (!_slowSampleAt.TryGetValue(id, out var value) || (WarehouseClock.UtcNow - value).TotalSeconds >= 10.0))
 		{
 			_slowSampleAt[id] = WarehouseClock.UtcNow;
-			AppendPerformance("SLOW", id, awake ? "awake" : "sleeping", 1, perfWindow.Skipped, elapsedMs, elapsedMs, _cycleTopologyMs, _cycleClassifyMs, _cycleDisplayMs, _cycleTransferMs, _cycleContainers, _cycleSigns, _cycleStores, _cycleInventoryReads, _cyclePeers, _cyclePingAverage, _cyclePingMaximum, _cycleLocalQualityMinimum, _cycleRemoteQualityMinimum, _cycleOutBytesPerSecond, _cycleInBytesPerSecond);
+			AppendPerformance("SLOW", id, (awake ? "awake" : "sleeping") + " [" + _cycleDetail.ToString().Trim() + "]", 1, perfWindow.Skipped, elapsedMs, elapsedMs, _cycleTopologyMs, _cycleClassifyMs, _cycleDisplayMs, _cycleTransferMs, _cycleContainers, _cycleSigns, _cycleStores, _cycleInventoryReads, _cyclePeers, _cyclePingAverage, _cyclePingMaximum, _cycleLocalQualityMinimum, _cycleRemoteQualityMinimum, _cycleOutBytesPerSecond, _cycleInBytesPerSecond);
 		}
 		if (!((WarehouseClock.UtcNow - perfWindow.Since).TotalSeconds < 30.0))
 		{
@@ -6017,9 +6297,8 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 	}
 
-	private void CapturePeerMetrics(IReadOnlyList<Peer> peers)
+	private void CapturePeerMetrics()
 	{
-		//IL_0044: Unknown result type (might be due to invalid IL or missing references)
 		//IL_004f: Expected O, but got Unknown
 		_cyclePeers = 0;
 		_cyclePingAverage = (_cyclePingMaximum = 0);
@@ -6046,23 +6325,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 		}
 		catch
 		{
-		}
-	}
-
-	private void DeleteLegacyLog(string path, string kind)
-	{
-		if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-		{
-			return;
-		}
-		try
-		{
-			File.Delete(path);
-			this.Logger.LogInfo((object)("Removed legacy warehouse " + kind + " log: " + path));
-		}
-		catch (Exception ex)
-		{
-			this.Logger.LogWarning((object)("Could not remove legacy warehouse " + kind + " log '" + path + "': " + ex.Message));
 		}
 	}
 
@@ -6097,10 +6359,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 
 	private static float Distance2(ServersideQoLZDO a, ServersideQoLZDO b)
 	{
-		//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0011: Unknown result type (might be due to invalid IL or missing references)
-		//IL_0016: Unknown result type (might be due to invalid IL or missing references)
-		//IL_001b: Unknown result type (might be due to invalid IL or missing references)
 		Vector3 val = a.ZDO.GetPosition() - b.ZDO.GetPosition();
 		return val.sqrMagnitude;
 	}
@@ -6117,10 +6375,6 @@ public sealed class WarehouseProcessor : Processor<ProcessorPrefabInfo<Sign>>
 			select cell.ZDO.GetPosition()).ToList();
 		return peers.Any((Peer peer) => peer != null && positions.Any(delegate(Vector3 position)
 		{
-			//IL_0006: Unknown result type (might be due to invalid IL or missing references)
-			//IL_000b: Unknown result type (might be due to invalid IL or missing references)
-			//IL_000c: Unknown result type (might be due to invalid IL or missing references)
-			//IL_0011: Unknown result type (might be due to invalid IL or missing references)
 			Vector3 val = peer.RefPos - position;
 			return val.sqrMagnitude <= distance2;
 		}));

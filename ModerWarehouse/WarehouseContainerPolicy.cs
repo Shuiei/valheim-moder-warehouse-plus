@@ -19,6 +19,41 @@ public static class WarehouseContainerPolicy
 		return !endpoint && !ignored && !isPrivate && !inUse && hasStorageSign;
 	}
 
+	public static bool IsExplicitLabelReset(string plainText)
+	{
+		return string.Equals((plainText ?? string.Empty).Trim(), "...", StringComparison.Ordinal);
+	}
+
+	public static bool TryParseNumberedLabel(string plainText, out string itemLabel, out int priority)
+	{
+		string text = (plainText ?? string.Empty).Trim();
+		int num = text.Length;
+		while (num > 0 && char.IsDigit(text[num - 1]))
+		{
+			num--;
+		}
+		itemLabel = text.Substring(0, num).TrimEnd(Array.Empty<char>());
+		priority = 0;
+		if (num == text.Length || itemLabel.Length == 0 || !int.TryParse(text.Substring(num), out priority))
+		{
+			return false;
+		}
+		if (priority >= 1)
+		{
+			return priority <= 99;
+		}
+		return false;
+	}
+
+	public static int EffectiveFillPriority(int storedPriority)
+	{
+		if (storedPriority < 1 || storedPriority > 99)
+		{
+			return 1;
+		}
+		return storedPriority;
+	}
+
 	public static int TransferAmount(int sourceStack, int wanted, int maxStack, int matchingStackSpace, int emptySlots)
 	{
 		int num = Math.Max(1, maxStack);

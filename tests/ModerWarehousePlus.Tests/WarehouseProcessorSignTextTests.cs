@@ -13,6 +13,7 @@ public class WarehouseProcessorSignTextTests
     [InlineData("  [wh:Harbour_2:req]", "Harbour_2", "req", "")]
     [InlineData("[WH:main:IN] R=60\nLANG=DE", "main", "IN", " R=60\nLANG=DE")]
     [InlineData("[WH:a-b:STATS]", "a-b", "STATS", "")]
+    [InlineData("[WH:main:FILL] Coal 50", "main", "FILL", " Coal 50")]
     public void AMarkerNamesAWarehouseAndARole(string text, string id, string role, string payload)
     {
         var match = WarehouseProcessor.Marker.Match(text);
@@ -27,7 +28,7 @@ public class WarehouseProcessorSignTextTests
     [InlineData("[WH:ma in:IN]")]
     [InlineData("Wood [WH:main:IN]")]
     [InlineData("[WH::IN]")]
-    public void AnythingElseIsNoMarker(string text) => Assert.DoesNotMatch(WarehouseProcessor.Marker, text);
+    public void AnythingElseIsNoMarker(string text) => Assert.False(WarehouseProcessor.Marker.IsMatch(text));
 
     [Fact]
     public void TheMaintenanceMarkersStandAlone()

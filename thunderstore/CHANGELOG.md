@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.1.0 — unreleased
+
+Brings in Moder Warehouse 2.0.1 to 2.0.3 by Cris Haani. Existing warehouses, labels,
+boards and statistics carry over; nothing needs to be rebuilt.
+
+- New chest types: category chests (`ORE`, `BARS`, `FOOD`, `MEADS`, `AMMO`, `TROPHIES`,
+  `WEAPONS`, `ARMOR`, `TOOLS`, `FISH`), a catch-all `MISC` chest, and refill chests
+  (`[WH:<id>:FILL] Coal 50`) that keep a chest next to a smelter or kitchen stocked.
+- Numbered labels such as `WOOD1`, `WOOD2`: lower numbers fill first. Item types spread
+  over several chests are gathered back together, and an emptied chest whose sign is
+  set to `...` is free for a new item.
+- The stock board shows `NO ROOM` when items find no place; boards show `INACTIVE` with
+  the reason instead of freezing.
+- Statistics keep daily totals for a year (item details for 90 days), the period goes up
+  to 365 days, the trends page forecasts when the chests will be full, and each world
+  save writes a CSV per warehouse to `BepInEx/config/ModerWarehousePlus/`.
+- A request without an OUT chest says so. `TARGET`/`SOLL` lines work in every language
+  and are no longer taken as a withdrawal. A withdrawal never mixes two items that share
+  a name (German Harz, Stein). Bars, ores and scrap no longer share German names.
+- Chests a player has open stay counted in stock and statistics. Signed chests holding
+  internal or cheated items are reported in the log and left alone.
+- Faster cycles and fewer stalls when arriving at a base: inventories are read a few
+  milliseconds per frame, and other warehouses' stock is read from a cache.
+- Removed: the `AutoLabelDelay` setting and conversions of pre-2.0 worlds.
+
 ## 1.0.2 — 2026-10-20
 
 - No more short freezes on big worlds: checking the warehouses (every 5 minutes) and

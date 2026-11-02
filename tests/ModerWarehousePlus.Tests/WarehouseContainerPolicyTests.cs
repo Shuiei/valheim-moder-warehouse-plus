@@ -40,4 +40,43 @@ public class WarehouseContainerPolicyTests
     [InlineData(10, 10, 50, -5, -1, 0)]
     public void TransferAmountIsLimitedBySourceWantedAndRoom(int source, int wanted, int maxStack, int matchingSpace, int emptySlots, int moved) =>
         Assert.Equal(moved, WarehouseContainerPolicy.TransferAmount(source, wanted, maxStack, matchingSpace, emptySlots));
+
+    [Theory]
+    [InlineData("WOOD2", "WOOD", 2)]
+    [InlineData("Holz 13", "Holz", 13)]
+    [InlineData(" Fine wood99 ", "Fine wood", 99)]
+    public void ANumberedLabelNamesItsItemAndPriority(string text, string label, int priority)
+    {
+        Assert.True(WarehouseContainerPolicy.TryParseNumberedLabel(text, out string actualLabel, out int actualPriority));
+        Assert.Equal(label, actualLabel);
+        Assert.Equal(priority, actualPriority);
+    }
+
+    [Theory]
+    [InlineData("WOOD")]
+    [InlineData("WOOD0")]
+    [InlineData("WOOD100")]
+    [InlineData("42")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void OtherLabelsAreNotNumbered(string? text) =>
+        Assert.False(WarehouseContainerPolicy.TryParseNumberedLabel(text!, out _, out _));
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 1)]
+    [InlineData(7, 7)]
+    [InlineData(99, 99)]
+    [InlineData(100, 1)]
+    public void AnUnnumberedOrOddPriorityCountsAsTheFirst(int stored, int effective) =>
+        Assert.Equal(effective, WarehouseContainerPolicy.EffectiveFillPriority(stored));
+
+    [Theory]
+    [InlineData("...", true)]
+    [InlineData(" ... ", true)]
+    [InlineData("..", false)]
+    [InlineData("Wood", false)]
+    [InlineData(null, false)]
+    public void ThreeDotsReleaseAChest(string? text, bool reset) =>
+        Assert.Equal(reset, WarehouseContainerPolicy.IsExplicitLabelReset(text!));
 }

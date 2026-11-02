@@ -31,8 +31,6 @@ public sealed class WarehouseConfig : ConfigBase<WarehouseConfig>
 
 	public ConfigEntry<float> LabelDistance { get; }
 
-	public ConfigEntry<float> AutoLabelDelay { get; }
-
 	public ConfigEntry<float> RequestResultSeconds { get; }
 
 	public ConfigEntry<float> BoardPageSeconds { get; }
@@ -63,7 +61,6 @@ public sealed class WarehouseConfig : ConfigBase<WarehouseConfig>
 		StaleInputLockMaxSeconds = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Safety", 90f, "Hard limit (s): the IN chest lock is released after this long even if its opener is still nearby.", key: "StaleInputLockMaxSeconds");
 		AutoCreateLabels = ConfigBase<WarehouseConfig>.BindEx<bool>(file, "Labels", true, "Create persistent localized white labels for homogeneous storage chests.", key: "AutoCreateLabels");
 		LabelDistance = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Labels", 1f, "Maximum distance for ordinary storage labels and blank adoption signs.", key: "LabelDistance");
-		AutoLabelDelay = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Labels", 90f, "Seconds an unlabeled homogeneous chest must remain unchanged before a sign is created.", key: "AutoLabelDelay");
 		RequestResultSeconds = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Requests", 8f, "Seconds withdrawal results remain visible before the REQ sign returns to its target-stock view (maximum 8 seconds).", key: "ResultDisplaySeconds");
 		BoardPageSeconds = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Display", 3f, "Seconds each warehouse board page remains visible.", key: "BoardPageSeconds");
 		BoardWakeDistance = ConfigBase<WarehouseConfig>.BindEx<float>(file, "Display", 5f, "Player distance in metres at which the stock board wakes up.", key: "BoardWakeDistance");
